@@ -1,0 +1,5 @@
+.vscode
+tmp/x-*
+tmp/*.tar.xz
+tmp/rpi-*
+poc
