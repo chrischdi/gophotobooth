@@ -21,7 +21,10 @@ vet:
 	@echo ">> vetting code"
 	@go vet $(shell go list ./... | grep -v /vendor/ | grep -v /poc/);
 
-build:  rpi-image-arm cross-arm-deps build-arm rpi-image-arm
+build:
+	mkdir -p bin
+	env CGO_ENABLED=1 \
+		go build -o bin/gophotobooth -v -x cmd/gophotobooth/main.go
 
 build-arm: 
 	mkdir -p bin

@@ -1,10 +1,14 @@
 package camera
 
 import (
+	"bytes"
 	"fmt"
 	"io/ioutil"
 
+	"github.com/rs/zerolog/log"
+
 	"github.com/micahwedemeyer/gphoto2go"
+	"github.com/rwcarlsen/goexif/exif"
 )
 
 type DSLR struct {
@@ -31,5 +35,21 @@ func (c *DSLR) Trigger() ([]byte, string, error) {
 	if err != nil {
 		return nil, "", fmt.Errorf("Error on ioutil ReadAll")
 	}
-	return buf, fp.Name, nil
+
+	r := bytes.NewReader(buf)
+	x, err := exif.Decode(r)
+	if err != nil {
+		log.Error().Err(err).Msg("error on exif.Decode")
+		// fallback to name from trigger
+		return buf, fp.Name, nil
+	}
+
+	d, err := x.DateTime()
+	if err != nil {
+		log.Error().Err(err).Msg("error extracting DateTime from exif")
+		// fallback to name from trigger
+		return buf, fp.Name, nil
+	}
+
+	return buf, fmt.Sprintf("%s.jpg", d.Format("2006-01-02T15-04-05")), nil
 }
