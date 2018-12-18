@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"image"
 
 	"github.com/chrischdi/gophotobooth/pkg/ui/cli"
 	"github.com/chrischdi/gophotobooth/pkg/ui/gtk"
@@ -19,7 +20,7 @@ type UI interface {
 	// Countdown shows the countdown till a photo gets taken
 	Countdown() error
 	// Publish makes a photo visible to the user
-	Publish(string) error
+	Publish(img image.Image) error
 	// Background starts the ui
 	Background() error
 }

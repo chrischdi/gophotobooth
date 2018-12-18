@@ -1,7 +1,12 @@
 package gtk
 
 import (
+	"bytes"
 	"fmt"
+	"image"
+
+	"github.com/disintegration/imaging"
+
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -32,35 +37,54 @@ func (ui *GTK) Countdown() error {
 	log.Info().Msg("countdown start")
 	for i := ui.Timer; i > 0; i-- {
 		log.Debug().Int("countdown", i).Msg("countdown")
-		log.Printf("countdown: %d", i)
 		_, err := glib.IdleAdd(gtkSetCountdownLabel, ui.content.countdownLabel, i)
 		if err != nil {
 			log.Error().Err(err).Msg("error on idleAdd for countdownLabel")
 		}
 		time.Sleep(time.Second)
 	}
-	log.Debug().Str("countdown", "Action").Msg("countdown")
-	_, err := glib.IdleAdd(gtkSetCountdownLabel, ui.content.countdownLabel, "Action")
+	_, err := glib.IdleAdd(gtkSetCountdownLabel, ui.content.countdownLabel, "Action!")
 	if err != nil {
 		log.Error().Err(err).Msg("error on idleAdd for countdownLabel")
 	}
 	return nil
 }
 
-func (ui *GTK) Publish(file string) error {
-	log.Debug().Str("file", file).Msg("publish image")
+func (ui *GTK) Publish(img image.Image) error {
 	width, height := ui.window.GetSize()
 
-	// img, err := gdk.PixbufNewFromFileAtSize(file, width, height+ui.overscan)
-	img, err := gdk.PixbufNewFromFileAtSize(file, width, height+ui.overscan)
+	resized := imaging.Fill(img, width, height, imaging.Center, imaging.Box)
+
+	log.Debug().Int("dx", img.Bounds().Dx()).Int("dy", img.Bounds().Dy()).Msg("img.Bounds")
+	log.Debug().Int("dx", resized.Bounds().Dx()).Int("dy", resized.Bounds().Dy()).Msg("resized.Bounds")
+
+	// write jpeg to buffer
+	var buf bytes.Buffer
+	err := imaging.Encode(&buf, resized, imaging.JPEG, imaging.JPEGQuality(95))
 	if err != nil {
 		return err
 	}
-	_, err = glib.IdleAdd(gtkSetImage, ui, img)
+
+	// load buffer to pixbuf
+	loader, err := gdk.PixbufLoaderNewWithType("jpeg")
+	if err != nil {
+		return err
+	}
+	_, err = loader.Write(buf.Bytes())
+	if err != nil {
+		return err
+	}
+	pb, err := loader.GetPixbuf()
+	if err != nil {
+		return err
+	}
+
+	// Publish the pixbuf
+	_, err = glib.IdleAdd(gtkSetImage, ui, pb)
 	if err != nil {
 		log.Error().Err(err).Msg("error on idleAdd for image")
 	}
-	log.Debug().Str("file", file).Msg("publish image done")
+	log.Debug().Msg("publish image done")
 	return nil
 }
 
@@ -129,12 +153,9 @@ func createContent() (*gtk.Image, *gtk.Overlay, *gtk.Label, error) {
 		return nil, nil, nil, fmt.Errorf("error creating gtk.Label: %v", err)
 	}
 	// set position
-	l.SetHAlign(gtk.ALIGN_END)
-	l.SetVAlign(gtk.ALIGN_START)
-	// margin right
-	l.SetMarginEnd(30)
-	// margin bottom
-	l.SetMarginTop(600)
+	l.SetHAlign(gtk.ALIGN_CENTER)
+	l.SetVAlign(gtk.ALIGN_CENTER)
+
 	o.AddOverlay(l)
 
 	if err != nil {
@@ -146,7 +167,9 @@ func createContent() (*gtk.Image, *gtk.Overlay, *gtk.Label, error) {
 
 func gtkSetImage(ui *GTK, pixbuf *gdk.Pixbuf) {
 	log.Debug().Msg("gtkSetImage: setFromPixBuf")
+	log.Debug().Int("width", ui.content.image.GetAllocatedWidth()).Int("height", ui.content.image.GetAllocatedHeight()).Msg("img allocatedSize before")
 	ui.content.image.SetFromPixbuf(pixbuf)
+	log.Debug().Int("width", ui.content.image.GetAllocatedWidth()).Int("height", ui.content.image.GetAllocatedHeight()).Msg("img allocatedSize after")
 	log.Debug().Msg("gtkSetImage: setCountdownLabel")
 	gtkSetCountdownLabel(ui.content.countdownLabel, "")
 	log.Debug().Msg("gtkSetImage: queueDraw")
@@ -164,12 +187,9 @@ func gtkSetCountdownLabel(label *gtk.Label, i interface{}) {
 	default:
 		tpl = "<span font_desc='Tahoma 120' color='#f44248'>%v</span>"
 	}
-	log.Debug().Msg("gtkSetCoundownLabel: markup")
 	label.SetMarkup(fmt.Sprintf(tpl, i))
 
-	log.Debug().Msg("gtkSetCoundownLabel: draw")
 	label.QueueDraw()
-	log.Debug().Msg("gtkSetCoundownLabel: end")
 }
 
 func NewGTK(timer, overscan int) (*GTK, error) {

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"image"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -19,8 +20,8 @@ func (ui *CLI) Countdown() error {
 	return nil
 }
 
-func (ui *CLI) Publish(file string) error {
-	log.Log().Str("file", file).Msg("UI: presenting picture")
+func (ui *CLI) Publish(img image.Image) error {
+	log.Log().Msg("UI: presenting picture")
 	return nil
 }
 

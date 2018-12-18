@@ -1,9 +1,13 @@
 package camera
 
 import (
+	"bytes"
 	"fmt"
+	"image"
 	"io/ioutil"
 	"path"
+
+	"github.com/disintegration/imaging"
 )
 
 type Options struct {
@@ -31,18 +35,24 @@ func HelpString() string {
 	return "dslr,dummy"
 }
 
-func TriggerCamera(c Camera, directory string) (string, error) {
+func TriggerCamera(c Camera, directory string) (image.Image, error) {
 	b, name, err := c.Trigger()
 	if err != nil {
-		return "", fmt.Errorf("error c.trigger: %v", err)
+		return nil, fmt.Errorf("error c.trigger: %v", err)
 	}
 
 	p := path.Join(directory, name)
 
 	err = ioutil.WriteFile(p, b, 0644)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	return p, nil
+	reader := bytes.NewReader(b)
+	img, err := imaging.Decode(reader)
+	if err != nil {
+		return nil, err
+	}
+
+	return img, nil
 }

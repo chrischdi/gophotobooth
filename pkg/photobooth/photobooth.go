@@ -1,7 +1,10 @@
 package photobooth
 
 import (
+	"bytes"
 	"fmt"
+	"image"
+	"io/ioutil"
 	"sync"
 	"time"
 
@@ -35,7 +38,18 @@ func (pb *Photobooth) Run() error {
 	if err != nil {
 		return fmt.Errorf("gui background error: %v", err)
 	}
-	pb.Gui.Publish("/opt/background.jpg")
+
+	b, err := ioutil.ReadFile("/opt/background.jpg")
+	if err != nil {
+		return err
+	}
+
+	img, _, err := image.Decode(bytes.NewReader(b))
+	if err != nil {
+		return err
+	}
+
+	pb.Gui.Publish(img)
 
 	for {
 		if pb.Buz.Pressed() {
@@ -67,7 +81,7 @@ func (pb *Photobooth) triggerWorkflow() error {
 
 	var (
 		err   error
-		photo string
+		photo image.Image
 	)
 
 	err = pb.Gui.Countdown()
@@ -85,9 +99,9 @@ func (pb *Photobooth) triggerWorkflow() error {
 	return nil
 }
 
-func (pb *Photobooth) triggerCamera() (string, error) {
+func (pb *Photobooth) triggerCamera() (image.Image, error) {
 	err := fmt.Errorf("none")
-	var photo string
+	var photo image.Image
 	for i := 0; i < 3; i++ {
 		photo, err = camera.TriggerCamera(pb.Cam, pb.Directory)
 		if err != nil {
@@ -96,5 +110,5 @@ func (pb *Photobooth) triggerCamera() (string, error) {
 		}
 		return photo, err
 	}
-	return "", err
+	return nil, err
 }

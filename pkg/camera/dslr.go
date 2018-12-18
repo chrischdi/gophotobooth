@@ -6,9 +6,9 @@ import (
 	"io/ioutil"
 
 	"github.com/rs/zerolog/log"
+	"github.com/rwcarlsen/goexif/exif"
 
 	"github.com/micahwedemeyer/gphoto2go"
-	"github.com/rwcarlsen/goexif/exif"
 )
 
 type DSLR struct {
