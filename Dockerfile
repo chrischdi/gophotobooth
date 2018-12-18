@@ -58,6 +58,10 @@ COPY image/xinitrc /etc/X11/xinit/xinitrc
 
 # rotate display
 RUN echo "display_rotate=2" >> /boot/config.txt
+# enforce DMR
+RUN echo "hdmi_group=2" >> /boot/config.txt
+# enforce 1280x800 resolution
+RUN echo "hdmi_mode=27" >> /boot/config.txt
 
 # enable mounting usb disk
 RUN pacman --noconfirm -S \
