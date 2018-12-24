@@ -11,11 +11,11 @@ import (
 
 	"github.com/rs/zerolog/log"
 
-	"github.com/gotk3/gotk3/glib"
-
 	"github.com/gotk3/gotk3/gdk"
-
+	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
+
+	"github.com/chrischdi/gophotobooth/pkg/ui/gtk/bindata"
 )
 
 const (
@@ -29,12 +29,17 @@ type GTK struct {
 	content  struct {
 		overlay        *gtk.Overlay
 		image          *gtk.Image
+		imageArrows    *gtk.Image
 		countdownLabel *gtk.Label
 	}
 }
 
 func (ui *GTK) Countdown() error {
 	log.Info().Msg("countdown start")
+	_, err := glib.IdleAdd(gtkEnableArrows, ui.content.imageArrows)
+	if err != nil {
+		log.Error().Err(err).Msg("error on idleAdd for imageArrows")
+	}
 	for i := ui.Timer; i > 0; i-- {
 		log.Debug().Int("countdown", i).Msg("countdown")
 		_, err := glib.IdleAdd(gtkSetCountdownLabel, ui.content.countdownLabel, i)
@@ -43,44 +48,49 @@ func (ui *GTK) Countdown() error {
 		}
 		time.Sleep(time.Second)
 	}
-	_, err := glib.IdleAdd(gtkSetCountdownLabel, ui.content.countdownLabel, "Action!")
+	_, err = glib.IdleAdd(gtkSetCountdownLabel, ui.content.countdownLabel, "Action!")
 	if err != nil {
 		log.Error().Err(err).Msg("error on idleAdd for countdownLabel")
 	}
 	return nil
 }
 
-func (ui *GTK) Publish(img image.Image) error {
-	width, height := ui.window.GetSize()
-
+func convertImageToPixbufAtSize(img image.Image, width, height int) (*gdk.Pixbuf, error) {
 	resized := imaging.Fill(img, width, height, imaging.Center, imaging.Box)
 
-	log.Debug().Int("dx", img.Bounds().Dx()).Int("dy", img.Bounds().Dy()).Msg("img.Bounds")
-	log.Debug().Int("dx", resized.Bounds().Dx()).Int("dy", resized.Bounds().Dy()).Msg("resized.Bounds")
-
-	// write jpeg to buffer
+	// write image to buffer
 	var buf bytes.Buffer
 	err := imaging.Encode(&buf, resized, imaging.JPEG, imaging.JPEGQuality(95))
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// load buffer to pixbuf
 	loader, err := gdk.PixbufLoaderNewWithType("jpeg")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	_, err = loader.Write(buf.Bytes())
 	if err != nil {
-		return err
+		return nil, err
 	}
 	pb, err := loader.GetPixbuf()
+	if err != nil {
+		return nil, err
+	}
+
+	return pb, nil
+}
+
+func (ui *GTK) Publish(img image.Image) error {
+	width, height := ui.window.GetSize()
+	pb, err := convertImageToPixbufAtSize(img, width, height)
 	if err != nil {
 		return err
 	}
 
 	// Publish the pixbuf
-	_, err = glib.IdleAdd(gtkSetImage, ui, pb)
+	_, err = glib.IdleAdd(gtkPublish, ui, pb)
 	if err != nil {
 		log.Error().Err(err).Msg("error on idleAdd for image")
 	}
@@ -99,17 +109,52 @@ func (ui *GTK) Background() error {
 		return fmt.Errorf("error creating gtk.Window: %v", err)
 	}
 
+	// load overlay image
+	b, err := bindata.Asset("arrows.png")
+	if err != nil {
+		return err
+	}
+
+	loader, err := gdk.PixbufLoaderNew()
+	if err != nil {
+		return err
+	}
+
+	_, err = loader.Write(b)
+	if err != nil {
+		return err
+	}
+
+	pb, err := loader.GetPixbuf()
+	if err != nil {
+		return err
+	}
+
 	// create window content
-	ui.content.image, ui.content.overlay, ui.content.countdownLabel, err = createContent()
+	ui.content.image, ui.content.imageArrows, ui.content.overlay, ui.content.countdownLabel, err = createContent(pb)
 	if err != nil {
 		return fmt.Errorf("error creating content: %v", err)
 	}
-	ui.content.image.SetSizeRequest(ui.window.GetAllocatedWidth(), ui.window.GetAllocatedHeight())
+	// ui.content.image.SetSizeRequest(ui.window.GetAllocatedWidth(), ui.window.GetAllocatedHeight())
+
 	ui.window.Add(ui.content.overlay)
 
 	ui.window.ShowAll()
 
 	go ui.background()
+
+	b, err = bindata.Asset("background.jpg")
+	if err != nil {
+		return err
+	}
+
+	img, _, err := image.Decode(bytes.NewReader(b))
+	if err != nil {
+		return err
+	}
+
+	ui.Publish(img)
+
 	return nil
 }
 
@@ -132,25 +177,34 @@ func createWindow(title string, width, height int) (*gtk.Window, error) {
 	return w, nil
 }
 
-func createContent() (*gtk.Image, *gtk.Overlay, *gtk.Label, error) {
+func createContent(arrows *gdk.Pixbuf) (*gtk.Image, *gtk.Image, *gtk.Overlay, *gtk.Label, error) {
 	o, err := gtk.OverlayNew()
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("error creating gtk.Overlay: %v", err)
+		return nil, nil, nil, nil, fmt.Errorf("error creating gtk.Overlay: %v", err)
 	}
 	o.SetHExpand(true)
 	o.SetVExpand(true)
 
 	i, err := gtk.ImageNew()
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("error creating gtk.Image: %v", err)
+		return nil, nil, nil, nil, fmt.Errorf("error creating gtk.Image: %v", err)
 	}
 	i.SetHExpand(false)
 	i.SetVExpand(false)
 	o.Add(i)
 
+	iArrows, err := gtk.ImageNewFromPixbuf(arrows)
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("error creating gtk.Image: %v", err)
+	}
+	iArrows.SetHExpand(false)
+	iArrows.SetVExpand(false)
+	iArrows.SetVisible(false)
+	o.AddOverlay(iArrows)
+
 	l, err := gtk.LabelNew("")
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("error creating gtk.Label: %v", err)
+		return nil, nil, nil, nil, fmt.Errorf("error creating gtk.Label: %v", err)
 	}
 	// set position
 	l.SetHAlign(gtk.ALIGN_CENTER)
@@ -159,22 +213,26 @@ func createContent() (*gtk.Image, *gtk.Overlay, *gtk.Label, error) {
 	o.AddOverlay(l)
 
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("error creating draw handler: %v", err)
+		return nil, nil, nil, nil, fmt.Errorf("error creating draw handler: %v", err)
 	}
 
-	return i, o, l, nil
+	return i, iArrows, o, l, nil
 }
 
-func gtkSetImage(ui *GTK, pixbuf *gdk.Pixbuf) {
-	log.Debug().Msg("gtkSetImage: setFromPixBuf")
-	log.Debug().Int("width", ui.content.image.GetAllocatedWidth()).Int("height", ui.content.image.GetAllocatedHeight()).Msg("img allocatedSize before")
+func gtkPublish(ui *GTK, pixbuf *gdk.Pixbuf) {
+	// set background image
 	ui.content.image.SetFromPixbuf(pixbuf)
-	log.Debug().Int("width", ui.content.image.GetAllocatedWidth()).Int("height", ui.content.image.GetAllocatedHeight()).Msg("img allocatedSize after")
-	log.Debug().Msg("gtkSetImage: setCountdownLabel")
+	// clear countdown label
 	gtkSetCountdownLabel(ui.content.countdownLabel, "")
-	log.Debug().Msg("gtkSetImage: queueDraw")
+	// disable overlay image
+	ui.content.imageArrows.SetVisible(false)
+	// draw
 	ui.content.overlay.QueueDraw()
-	log.Debug().Msg("gtkSetImage: end")
+}
+
+func gtkEnableArrows(image *gtk.Image) {
+	image.Show()
+	image.QueueDraw()
 }
 
 func gtkSetCountdownLabel(label *gtk.Label, i interface{}) {

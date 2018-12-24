@@ -80,7 +80,6 @@ COPY image/wpa_supplicant-wlan0.conf /etc/wpa_supplicant/wpa_supplicant-wlan0.co
 COPY image/00-wireless-dhcp.network /etc/systemd/network/00-wireless-dhcp.network
 
 # copy binaries and stuff
-COPY image/splash/background.jpg /opt/
 COPY bin/ /usr/local/bin/
 
 # cleanup
