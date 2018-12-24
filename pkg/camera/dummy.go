@@ -21,8 +21,7 @@ func (c *DummyCamera) Trigger() ([]byte, string, error) {
 	}
 	f.Close()
 
-	//cmd := exec.Command("convert", "-size", "3840x2160", "xc:white", "-font", "Cantarell-Bold", "-pointsize", "120", "-fill", "black", "-annotate", "+120+120", fmt.Sprintf("\"gophotobooth\n%s\"", time.Now()), f.Name())
-	cmd := exec.Command("convert", "-size", "4496x3000", "xc:green", "-font", "Cantarell-Bold", "-pointsize", "120", "-fill", "black", "-annotate", "+120+120", fmt.Sprintf("\"gophotobooth\n%s\"", time.Now()), f.Name())
+	cmd := exec.Command("convert", "-size", "4496x3000", "xc:green", "-font", "Cantarell-Bold", "-pointsize", "120", "-fill", "black", "-annotate", "+120+120", fmt.Sprintf("\"\n\n\ngophotobooth\n%s\"", time.Now()), f.Name())
 	err = cmd.Run()
 	if err != nil {
 		return nil, "", fmt.Errorf("Command finished with error: %v", err)
