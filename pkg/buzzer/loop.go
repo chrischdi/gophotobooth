@@ -12,5 +12,6 @@ func (b *TrueBuzzer) Wait() error {
 }
 
 func (b *TrueBuzzer) Pressed() bool {
+	time.Sleep(time.Second)
 	return true
 }
