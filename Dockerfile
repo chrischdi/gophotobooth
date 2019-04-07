@@ -75,12 +75,28 @@ COPY image/alarm/bashrc /home/alarm/.bashrc
 USER root
 
 # wifi setup
-RUN ln -s /usr/lib/systemd/system/wpa_supplicant@.service /etc/systemd/system/multi-user.target.wants/wpa_supplicant@wlan0.service
 COPY image/wpa_supplicant-wlan0.conf /etc/wpa_supplicant/wpa_supplicant-wlan0.conf
 COPY image/00-wireless-dhcp.network /etc/systemd/network/00-wireless-dhcp.network
+RUN ln -s /usr/lib/systemd/system/wpa_supplicant@.service /etc/systemd/system/multi-user.target.wants/wpa_supplicant@wlan0.service
+
+# wifi ap setup
+RUN pacman --noconfirm -S \
+  dnsmasq \
+  hostapd
+COPY image/hostapd.conf /etc/hostapd/hostapd.conf
+COPY image/dnsmasq.conf /etc/dnsmasq.conf
+RUN ln -s /usr/lib/systemd/system/dnsmasq.service /etc/systemd/system/multi-user.target.wants/dnsmasq.service \
+  && ln -s /usr/lib/systemd/system/hostapd.service /etc/systemd/system/multi-user.target.wants/hostapd.service
+COPY image/00-wireless-ap.network /etc/systemd/network/00-wireless-ap.network
+
+# disable normal wifi
+RUN rm /etc/systemd/system/multi-user.target.wants/wpa_supplicant@wlan0.service \
+  etc/systemd/network/00-wireless-dhcp.network
 
 # copy binaries and stuff
 COPY bin/ /usr/local/bin/
+COPY image/photoweb.service /etc/systemd/system/photoweb.service
+RUN ln -s /etc/systemd/system/photoweb.service /etc/systemd/system/multi-user.target.wants/photoweb.service
 
 # cleanup
 RUN pacman --noconfirm -Scc

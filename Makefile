@@ -38,7 +38,12 @@ build-arm:
 		GOARM=7 \
 		GOOS=linux \
 		CGO_ENABLED=1 \
-		go build -o bin/gophotobooth -v -x cmd/gophotobooth/main.go
+		go build -o bin/gophotobooth -v -x -ldflags="-s -w" cmd/gophotobooth/main.go
+	env	GOARCH=arm \
+		GOARM=7 \
+		GOOS=linux \
+		CGO_ENABLED=0 \
+		go build -o bin/photoweb -v -x -ldflags="-s -w" cmd/photoweb/main.go
 
 cross-arm-deps: deps-arm
 	echo ">> creating directory tmp"

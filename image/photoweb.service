@@ -1,0 +1,9 @@
+[Unit]
+Description=A lightweight web-server
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/photoweb -p 80
+
+[Install]
+WantedBy=multi-user.target
