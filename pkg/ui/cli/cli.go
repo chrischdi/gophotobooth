@@ -28,3 +28,7 @@ func (ui *CLI) Publish(img image.Image) error {
 func (ui *CLI) Background() error {
 	return nil
 }
+
+func (ui *CLI) Error(err error, duration time.Duration) {
+	log.Error().Err(err).Msg("UI: showing error")
+}

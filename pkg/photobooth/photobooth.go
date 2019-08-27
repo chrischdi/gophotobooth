@@ -24,6 +24,14 @@ type Photobooth struct {
 	Directory string
 	// AutoPictureTimer is the timer which enforces taking a picture when reached
 	AutoPictureTimer time.Duration
+
+	Options PhotoboothOptions
+}
+
+type PhotoboothOptions struct {
+	Buzzer string
+	Camera string
+	Gui    string
 }
 
 // Run starts the gui and loops for photos
@@ -38,10 +46,20 @@ func (pb *Photobooth) Run() error {
 	}
 
 	for {
+		err = pb.ResetCamera()
+		if err == nil {
+			break
+		}
+		pb.Gui.Error(fmt.Errorf("* ist die Kamera eingeschaltet?\n\n%v", err), time.Second*3)
+	}
+
+	for {
 		if pb.Buz.Pressed() {
-			err = pb.triggerWorkflow()
-			if err != nil {
-				return err
+			if err := pb.TriggerWorkflow(); err != nil {
+				pb.Gui.Error(err, time.Second*3)
+				if err := pb.ResetCamera(); err != nil {
+					pb.Gui.Error(err, time.Second*3)
+				}
 			}
 			continue
 		}
@@ -53,13 +71,16 @@ func (pb *Photobooth) Run() error {
 }
 
 func (pb *Photobooth) autoPicture() {
-	err := pb.triggerWorkflow()
+	err := pb.TriggerWorkflow()
 	if err != nil {
-		log.Error().Err(err).Msg("error triggering workflow")
+		pb.Gui.Error(err, time.Second*3)
+		if err := pb.ResetCamera(); err != nil {
+			pb.Gui.Error(err, time.Second*3)
+		}
 	}
 }
 
-func (pb *Photobooth) triggerWorkflow() error {
+func (pb *Photobooth) TriggerWorkflow() error {
 	pb.mutex.Lock()
 	defer pb.mutex.Unlock()
 
@@ -76,13 +97,22 @@ func (pb *Photobooth) triggerWorkflow() error {
 	}
 	photo, err = pb.triggerCamera()
 	if err != nil {
-		return fmt.Errorf("cam trigger error: %v", err)
+		return fmt.Errorf("* ist die Kamera eingeschaltet?\n* ist der Raum zu Dunkel?\n\ncam trigger error: %v", err)
 	}
 	err = pb.Gui.Publish(photo)
 	if err != nil {
 		return fmt.Errorf("gui publish error: %v", err)
 	}
 	return nil
+}
+
+func (pb *Photobooth) ResetCamera() error {
+	if pb.Cam != nil {
+		pb.Cam.Free()
+	}
+	var err error
+	pb.Cam, err = camera.NewCamera(pb.Options.Camera, camera.Options{})
+	return err
 }
 
 func (pb *Photobooth) triggerCamera() (image.Image, error) {

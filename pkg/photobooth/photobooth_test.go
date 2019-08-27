@@ -2,7 +2,9 @@ package photobooth
 
 import (
 	"fmt"
+	"image"
 	"testing"
+	"time"
 
 	"github.com/chrischdi/gophotobooth/pkg/buzzer"
 	"github.com/chrischdi/gophotobooth/pkg/camera"
@@ -19,6 +21,18 @@ func (c *AfterXErrorCamera) Trigger() ([]byte, string, error) {
 	}
 	c.X = c.X - 1
 	return nil, "", nil
+}
+
+func (c *AfterXErrorCamera) Focus() error {
+	return nil
+}
+
+func (c *AfterXErrorCamera) ShutterspeedInc() error {
+	return nil
+}
+
+func (c *AfterXErrorCamera) ShutterspeedDec() error {
+	return nil
 }
 
 type AlwaysPressedBuzzer struct {
@@ -62,7 +76,8 @@ func (ui *DummyUI) Countdown() error {
 	ui.countdownErrAfter = ui.countdownErrAfter - 1
 	return nil
 }
-func (ui *DummyUI) Publish(string) error {
+
+func (ui *DummyUI) Publish(img image.Image) error {
 	if ui.publishErrAfter == 0 {
 		return fmt.Errorf("err")
 	}
@@ -72,6 +87,10 @@ func (ui *DummyUI) Publish(string) error {
 
 func (ui *DummyUI) Background() error {
 	return nil
+}
+
+func (ui *DummyUI) Error(err error, duration time.Duration) {
+	return
 }
 
 func TestPhotobooth_Loop(t *testing.T) {

@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"image"
+	"time"
 
 	"github.com/chrischdi/gophotobooth/pkg/ui/cli"
 	"github.com/chrischdi/gophotobooth/pkg/ui/gtk"
@@ -23,6 +24,8 @@ type UI interface {
 	Publish(img image.Image) error
 	// Background starts the ui
 	Background() error
+	// Error shows the given error for the given amount of time
+	Error(err error, duration time.Duration)
 }
 
 func NewUI(name string, options Options) (UI, error) {

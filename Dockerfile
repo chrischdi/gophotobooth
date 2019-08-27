@@ -16,6 +16,7 @@ RUN pacman --noconfirm -S \
     xorg-server \
     xorg-xinit \
     xorg-xset \
+    xorg-xhost xorg-xrandr \
     xterm
 # xorg-xset: to disable blanking
 # xorg-apps
@@ -95,8 +96,6 @@ RUN rm /etc/systemd/system/multi-user.target.wants/wpa_supplicant@wlan0.service 
 
 # copy binaries and stuff
 COPY bin/ /usr/local/bin/
-COPY image/photoweb.service /etc/systemd/system/photoweb.service
-RUN ln -s /etc/systemd/system/photoweb.service /etc/systemd/system/multi-user.target.wants/photoweb.service
 
 # cleanup
 RUN pacman --noconfirm -Scc

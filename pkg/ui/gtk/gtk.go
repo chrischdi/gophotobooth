@@ -36,19 +36,19 @@ type GTK struct {
 
 func (ui *GTK) Countdown() error {
 	log.Info().Msg("countdown start")
-	_, err := glib.IdleAdd(gtkEnableArrows, ui.content.imageArrows)
+	_, err := glib.IdleAdd(func() { gtkEnableArrows(ui.content.imageArrows) })
 	if err != nil {
 		log.Error().Err(err).Msg("error on idleAdd for imageArrows")
 	}
 	for i := ui.Timer; i > 0; i-- {
 		log.Debug().Int("countdown", i).Msg("countdown")
-		_, err := glib.IdleAdd(gtkSetCountdownLabel, ui.content.countdownLabel, i)
+		_, err := glib.IdleAdd(func() { gtkSetCountdownLabel(ui.content.countdownLabel, i) })
 		if err != nil {
 			log.Error().Err(err).Msg("error on idleAdd for countdownLabel")
 		}
 		time.Sleep(time.Second)
 	}
-	_, err = glib.IdleAdd(gtkSetCountdownLabel, ui.content.countdownLabel, "Action!")
+	_, err = glib.IdleAdd(func() { gtkSetCountdownLabel(ui.content.countdownLabel, "Action!") })
 	if err != nil {
 		log.Error().Err(err).Msg("error on idleAdd for countdownLabel")
 	}
@@ -90,7 +90,7 @@ func (ui *GTK) Publish(img image.Image) error {
 	}
 
 	// Publish the pixbuf
-	_, err = glib.IdleAdd(gtkPublish, ui, pb)
+	_, err = glib.IdleAdd(func() { gtkPublish(ui, pb) })
 	if err != nil {
 		log.Error().Err(err).Msg("error on idleAdd for image")
 	}
@@ -158,6 +158,19 @@ func (ui *GTK) Background() error {
 	return nil
 }
 
+func (ui *GTK) Error(err error, duration time.Duration) {
+	log.Error().Err(err).Msgf("trying to show error")
+	_, idleaddErr := glib.IdleAdd(func() {
+		// disable overlay image
+		ui.content.imageArrows.SetVisible(false)
+		gtkSetCountdownLabel(ui.content.countdownLabel, err)
+	})
+	if idleaddErr != nil {
+		log.Error().Err(err).Msg("error on idleAdd for countdownLabel")
+	}
+	time.Sleep(duration)
+}
+
 func (ui *GTK) background() {
 	gtk.Main()
 	panic("gtk.Main did return")
@@ -209,6 +222,7 @@ func createContent(arrows *gdk.Pixbuf) (*gtk.Image, *gtk.Image, *gtk.Overlay, *g
 	// set position
 	l.SetHAlign(gtk.ALIGN_CENTER)
 	l.SetVAlign(gtk.ALIGN_CENTER)
+	l.SetLineWrap(true)
 
 	o.AddOverlay(l)
 
@@ -238,6 +252,8 @@ func gtkEnableArrows(image *gtk.Image) {
 func gtkSetCountdownLabel(label *gtk.Label, i interface{}) {
 	var tpl string
 	switch i.(type) {
+	case error:
+		tpl = "<span font_desc='Tahoma 30' color='#f44248'>%v</span>"
 	case int:
 		tpl = "<span font_desc='Tahoma 120' color='#f44248'>%d</span>"
 	case string:

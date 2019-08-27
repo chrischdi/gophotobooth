@@ -17,6 +17,10 @@ type Options struct {
 type Camera interface {
 	// trigger is the subcommand which creates and returns the photo
 	Trigger() ([]byte, string, error)
+	Focus() error
+	ShutterspeedInc() error
+	ShutterspeedDec() error
+	Free()
 }
 
 type cameraImpl struct{}
@@ -24,7 +28,7 @@ type cameraImpl struct{}
 func NewCamera(name string, options Options) (Camera, error) {
 	switch name {
 	case "dslr":
-		return NewDSLR(), nil
+		return NewDSLR()
 	case "dummy":
 		return &DummyCamera{}, nil
 	}
@@ -36,6 +40,9 @@ func HelpString() string {
 }
 
 func TriggerCamera(c Camera, directory string) (image.Image, error) {
+	if c == nil {
+		return nil, fmt.Errorf("error triggering camera: camera is nil")
+	}
 	b, name, err := c.Trigger()
 	if err != nil {
 		return nil, fmt.Errorf("error c.trigger: %v", err)

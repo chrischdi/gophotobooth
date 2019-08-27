@@ -38,3 +38,17 @@ func (c *DummyCamera) Trigger() ([]byte, string, error) {
 
 	return b, parts[len(parts)-1], nil
 }
+
+func (c *DummyCamera) Focus() error {
+	return nil
+}
+
+func (c *DummyCamera) ShutterspeedInc() error {
+	return nil
+}
+
+func (c *DummyCamera) ShutterspeedDec() error {
+	return nil
+}
+
+func (c *DummyCamera) Free() {}

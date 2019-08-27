@@ -1,3 +1,10 @@
+# requirements
+
+**Archlinux**:
+```
+yay -Sy aur/qemu-user-static-bin
+```
+
 # Build binary
 
 On target system: 
