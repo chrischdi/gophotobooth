@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package ui;
+
+option go_package = "github.com/chrischdi/gophotobooth/proto/ui";
+
+import "google/protobuf/empty.proto";
+
+// UI controls what is shown on the photo booth display.
+// Core calls these RPCs during the photo workflow.
+service UI {
+    // ShowIdle displays the idle/welcome screen. Called once at Core startup.
+    rpc ShowIdle(google.protobuf.Empty) returns (google.protobuf.Empty);
+
+    // ShowCountdown displays a countdown digit (3, 2, or 1).
+    rpc ShowCountdown(CountdownRequest) returns (google.protobuf.Empty);
+
+    // ShowSmile displays the "Smile!" prompt.
+    rpc ShowSmile(google.protobuf.Empty) returns (google.protobuf.Empty);
+
+    // ShowImage displays the captured photo.
+    rpc ShowImage(ShowImageRequest) returns (google.protobuf.Empty);
+
+    // ShowError displays an error message.
+    rpc ShowError(ShowErrorRequest) returns (google.protobuf.Empty);
+}
+
+message CountdownRequest {
+    // count is the number to display (3, 2, 1).
+    int32 count = 1;
+}
+
+message ShowImageRequest {
+    // image_bytes contains the raw JPEG bytes of the captured photo.
+    bytes image_bytes = 1;
+    // format is the MIME type, e.g. "image/jpeg".
+    string format = 2;
+}
+
+message ShowErrorRequest {
+    string message = 1;
+}

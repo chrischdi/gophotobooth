@@ -1,0 +1,16 @@
+# Binaries
+bin/
+
+# Generated protobuf/gRPC stubs
+proto/**/*.pb.go
+
+# Go test cache and coverage
+*.test
+*.out
+
+# Editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~

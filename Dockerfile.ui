@@ -1,0 +1,32 @@
+# Build stage — requires OpenGL/X11 headers for Fyne.
+FROM golang:1.26.1 AS builder
+ARG TARGETARCH
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1-mesa-dev \
+    libx11-dev \
+    libxrandr-dev \
+    libxinerama-dev \
+    libxcursor-dev \
+    libxi-dev \
+    libxxf86vm-dev \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=1 GOOS=linux GOARCH=${TARGETARCH} go build -o /ui ./cmd/ui
+
+# Runtime stage — needs X11/OpenGL runtime for Fyne.
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1 \
+    libx11-6 \
+    libxrandr2 \
+    libxinerama1 \
+    libxcursor1 \
+    libxi6 \
+    libxxf86vm1 \
+    fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /ui /ui
+ENTRYPOINT ["/ui"]

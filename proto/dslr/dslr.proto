@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package dslr;
+
+option go_package = "github.com/chrischdi/gophotobooth/proto/dslr";
+
+import "google/protobuf/empty.proto";
+
+// DSLR is the camera bridge service.
+// Core calls TakePhoto after completing the countdown.
+service DSLR {
+    // TakePhoto triggers the camera capture and returns the image bytes.
+    rpc TakePhoto(google.protobuf.Empty) returns (TakePhotoResponse);
+}
+
+message TakePhotoResponse {
+    // image_bytes contains the raw JPEG bytes of the captured photo.
+    bytes image_bytes = 1;
+    // filename is the suggested filename, e.g. "2026-03-22T15-04-05.jpg".
+    string filename = 2;
+}

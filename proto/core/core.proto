@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package core;
+
+option go_package = "github.com/chrischdi/gophotobooth/proto/core";
+
+import "google/protobuf/empty.proto";
+
+// Core is the main orchestrator service.
+// Clients (Buzzer, ctl) call Trigger to start the photo workflow.
+service Core {
+    // Trigger initiates the photo workflow: countdown -> smile -> capture -> display.
+    // Returns ALREADY_EXISTS if a workflow is already in progress.
+    rpc Trigger(google.protobuf.Empty) returns (google.protobuf.Empty);
+}

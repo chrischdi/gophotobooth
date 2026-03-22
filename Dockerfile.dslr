@@ -1,0 +1,20 @@
+# Build stage — requires libgphoto2-dev for CGO compilation.
+FROM golang:1.26.1 AS builder
+ARG TARGETARCH
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgphoto2-dev \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=1 GOOS=linux GOARCH=${TARGETARCH} go build -o /dslr ./cmd/dslr
+
+# Runtime stage — only needs libgphoto2 runtime libraries.
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgphoto2-6 \
+    libgphoto2-port12 \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /dslr /dslr
+ENTRYPOINT ["/dslr"]

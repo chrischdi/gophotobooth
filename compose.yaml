@@ -1,0 +1,97 @@
+name: gophotobooth
+
+volumes:
+  photos:
+  thumbs:
+
+services:
+
+  core:
+    image: gophotobooth-core
+    build:
+      context: .
+      dockerfile: Dockerfile.core
+    restart: unless-stopped
+    volumes:
+      - photos:/photos
+    command:
+      - --directory=/photos
+      - --ui-address=ui:50001
+      - --dslr-address=${DSLR_ADDRESS:-dslr:50002}
+      - --post-capture-seconds=10
+      - --auto-trigger-minutes=5
+    depends_on:
+      - ui
+    profiles: [full, no-hardware, full-hardware]
+
+  ui:
+    image: gophotobooth-ui
+    build:
+      context: .
+      dockerfile: Dockerfile.ui
+    restart: unless-stopped
+    environment:
+      - DISPLAY=${DISPLAY:-:0}
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix
+    # Allow the container to access the host display.
+    network_mode: host
+    profiles: [full, no-hardware]
+
+  dslr:
+    image: gophotobooth-dslr
+    build:
+      context: .
+      dockerfile: Dockerfile.dslr
+    restart: unless-stopped
+    privileged: true
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
+    profiles: [full, full-hardware]
+
+  # Dummy DSLR for no-hardware mode: uses ctl serve-dslr-dummy.
+  # Must be named separately because compose doesn't allow the same service
+  # name in multiple profiles. Core must use --dslr-address=dslr-dummy:50002
+  # when running the no-hardware profile.
+  dslr-dummy:
+    image: gophotobooth-ctl
+    build:
+      context: .
+      dockerfile: Dockerfile.ctl
+    restart: unless-stopped
+    command:
+      - dslr-serve-dummy
+      - --dslr-address=0.0.0.0:50002
+    profiles: [no-hardware]
+
+  buzzer:
+    image: gophotobooth-buzzer
+    build:
+      context: .
+      dockerfile: Dockerfile.buzzer
+    restart: unless-stopped
+    # Access to GPIO chip for button input.
+    devices:
+      - /dev/gpiochip0:/dev/gpiochip0
+    command:
+      - --core-address=core:50000
+      - --pin=GPIO17
+    depends_on:
+      - core
+    profiles: [full, full-hardware]
+
+  gallery:
+    image: gophotobooth-gallery
+    build:
+      context: .
+      dockerfile: Dockerfile.gallery
+    restart: unless-stopped
+    volumes:
+      - photos:/photos:ro
+      - thumbs:/cache
+    ports:
+      - "8080:8080"
+    command:
+      - --directory=/photos
+      - --cache-dir=/cache
+    profiles: [full, no-hardware, full-hardware]
