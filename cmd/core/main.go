@@ -21,6 +21,7 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/chrischdi/gophotobooth/internal/constants"
+	"github.com/chrischdi/gophotobooth/internal/galleryurl"
 	pbcore "github.com/chrischdi/gophotobooth/proto/core"
 	pbdslr "github.com/chrischdi/gophotobooth/proto/dslr"
 	pbui "github.com/chrischdi/gophotobooth/proto/ui"
@@ -33,8 +34,10 @@ type coreServer struct {
 	dslr pbdslr.DSLRClient
 
 	photoDir            string
+	galleryBaseURL      string
 	postCaptureDuration time.Duration
 	autoTriggerDuration time.Duration
+	sleepFn             func(time.Duration)
 
 	mu    sync.Mutex
 	timer *time.Timer
@@ -64,7 +67,7 @@ func (s *coreServer) runWorkflow() error {
 		if _, err := s.ui.ShowCountdown(ctx, &pbui.CountdownRequest{Count: count}); err != nil {
 			return fmt.Errorf("ShowCountdown(%d): %w", count, err)
 		}
-		time.Sleep(time.Second)
+		s.sleepFn(time.Second)
 	}
 
 	if _, err := s.ui.ShowSmile(ctx, &emptypb.Empty{}); err != nil {
@@ -77,21 +80,27 @@ func (s *coreServer) runWorkflow() error {
 	}
 
 	path := filepath.Join(s.photoDir, resp.Filename)
-	if err := os.WriteFile(path, resp.ImageBytes, 0644); err != nil {
-		return fmt.Errorf("write photo %s: %w", path, err)
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, resp.ImageBytes, 0644); err != nil {
+		return fmt.Errorf("write photo %s: %w", tmp, err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return fmt.Errorf("rename photo %s: %w", path, err)
 	}
 	slog.Info("photo saved", "path", path)
 
+	oldest, _ := galleryurl.OldestPhotoName(s.photoDir)
 	if _, err := s.ui.ShowImage(ctx, &pbui.ShowImageRequest{
 		ImageBytes: resp.ImageBytes,
 		Format:     "image/jpeg",
+		PhotoUrl:   galleryurl.DirectURL(s.galleryBaseURL, oldest, resp.Filename),
 	}); err != nil {
 		return fmt.Errorf("ShowImage: %w", err)
 	}
 
 	// Block the workflow lock for the post-capture period so no new workflow
 	// can start immediately. The UI keeps showing the last photo.
-	time.Sleep(s.postCaptureDuration)
+	s.sleepFn(s.postCaptureDuration)
 
 	return nil
 }
@@ -112,17 +121,21 @@ func (s *coreServer) resetTimer() {
 }
 
 func dialGRPC(addr string) (*grpc.ClientConn, error) {
-	return grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	return grpc.NewClient(addr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(32*1024*1024)),
+	)
 }
 
 func main() {
 	var (
-		listenAddr          string
-		uiAddr              string
-		dslrAddr            string
-		photoDir            string
-		postCaptureSecs     int
-		autoTriggerMinutes  int
+		listenAddr         string
+		uiAddr             string
+		dslrAddr           string
+		photoDir           string
+		galleryBaseURL     string
+		postCaptureSecs    int
+		autoTriggerMinutes int
 	)
 
 	cmd := &cobra.Command{
@@ -137,25 +150,22 @@ func main() {
 			if err != nil {
 				return fmt.Errorf("connect UI %s: %w", uiAddr, err)
 			}
-			defer uiConn.Close()
+			defer uiConn.Close() //nolint:errcheck
 
 			dslrConn, err := dialGRPC(dslrAddr)
 			if err != nil {
 				return fmt.Errorf("connect DSLR %s: %w", dslrAddr, err)
 			}
-			defer dslrConn.Close()
+			defer dslrConn.Close() //nolint:errcheck
 
 			srv := &coreServer{
 				ui:                  pbui.NewUIClient(uiConn),
 				dslr:                pbdslr.NewDSLRClient(dslrConn),
 				photoDir:            photoDir,
+				galleryBaseURL:      galleryBaseURL,
 				postCaptureDuration: time.Duration(postCaptureSecs) * time.Second,
 				autoTriggerDuration: time.Duration(autoTriggerMinutes) * time.Minute,
-			}
-
-			// Show idle on startup.
-			if _, err := srv.ui.ShowIdle(context.Background(), &emptypb.Empty{}); err != nil {
-				slog.Warn("ShowIdle on startup failed", "err", err)
+				sleepFn:             time.Sleep,
 			}
 
 			srv.resetTimer()
@@ -177,8 +187,9 @@ func main() {
 	cmd.Flags().StringVar(&uiAddr, "ui-address", constants.UIAddress, "UI service gRPC address")
 	cmd.Flags().StringVar(&dslrAddr, "dslr-address", constants.DSLRAddress, "DSLR service gRPC address")
 	cmd.Flags().StringVar(&photoDir, "directory", "/photos", "directory to store photos")
-	cmd.Flags().IntVar(&postCaptureSecs, "post-capture-seconds", 10, "seconds to block new workflows after a capture")
-	cmd.Flags().IntVar(&autoTriggerMinutes, "auto-trigger-minutes", 5, "minutes of inactivity before auto-triggering a workflow")
+	cmd.Flags().StringVar(&galleryBaseURL, "gallery-base-url", "", "base URL of the gallery service (e.g. http://photobooth.local:8080); enables QR code on the UI when set")
+	cmd.Flags().IntVar(&postCaptureSecs, "post-capture-seconds", 3, "seconds to block new workflows after a capture")
+	cmd.Flags().IntVar(&autoTriggerMinutes, "auto-trigger-minutes", 15, "minutes of inactivity before auto-triggering a workflow")
 
 	if err := cmd.Execute(); err != nil {
 		os.Exit(1)

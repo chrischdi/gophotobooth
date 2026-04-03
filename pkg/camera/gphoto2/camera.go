@@ -32,8 +32,8 @@ func New() (*Camera, error) {
 }
 
 // Close releases the camera connection.
-func (c *Camera) Close() {
-	_ = c.cam.Exit()
+func (c *Camera) Close() error {
+	return c.cam.Exit()
 }
 
 // TakePhoto captures a photo via gphoto2 and returns the JPEG bytes.
@@ -45,8 +45,11 @@ func (c *Camera) TakePhoto() (*camera.Photo, error) {
 		return nil, fmt.Errorf("gphoto2: capture: %w", err)
 	}
 
-	rc := c.cam.FileReader(filePath.Folder, filePath.Name)
-	defer rc.Close()
+	rc, err := c.cam.FileReader(filePath.Folder, filePath.Name)
+	if err != nil {
+		return nil, fmt.Errorf("gphoto2: open file: %w", err)
+	}
+	defer rc.Close() //nolint:errcheck
 
 	var buf bytes.Buffer
 	if _, err := io.Copy(&buf, rc); err != nil {

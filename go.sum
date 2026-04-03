@@ -6,8 +6,12 @@ github.com/BurntSushi/toml v1.5.0 h1:W5quZX/G/csjUnuI8SUYlsHs9M38FC7znL0lIO+DvMg
 github.com/BurntSushi/toml v1.5.0/go.mod h1:ukJfTF/6rtPPRCnwkur4qwRxa8vTRFBF0uk2lLoLwho=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
 github.com/cespare/xxhash/v2 v2.3.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
+github.com/chrischdi/gphoto2go v0.0.0-20190512154430-cb58af4bf421 h1:X9MaN2z4zFj0CdK7Qmd6yvwsKn+rQQFQG6ahIhWoT7s=
+github.com/chrischdi/gphoto2go v0.0.0-20190512154430-cb58af4bf421/go.mod h1:0IO8fN92V0FASTOsTW2VdP+hEL7cSoamZL/CtERf1O4=
 github.com/chrischdi/gphoto2go v0.0.0-20190929130056-e614e412b281 h1:yw92Hozr2dTrZTwMzF4WAKfJmyF5DJS0Oe3yN1gVNXI=
 github.com/chrischdi/gphoto2go v0.0.0-20190929130056-e614e412b281/go.mod h1:0IO8fN92V0FASTOsTW2VdP+hEL7cSoamZL/CtERf1O4=
+github.com/chrischdi/gphoto2go v0.0.0-20260403080911-d3304d2681d5 h1:YSjVqrYO3KhYpovcHtAtsygHWFjm27d1MaEm6CpCU/A=
+github.com/chrischdi/gphoto2go v0.0.0-20260403080911-d3304d2681d5/go.mod h1:UpNM0pzpcoVEqL3Shc1aaJLq/CoBux6hen/mlxQoU2c=
 github.com/cpuguy83/go-md2man/v2 v2.0.6/go.mod h1:oOW0eioCTA6cOiMLiUPZOpcVxMig6NIQQ7OS05n1F4g=
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
@@ -77,6 +81,8 @@ github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZN
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
 github.com/rymdport/portal v0.4.2 h1:7jKRSemwlTyVHHrTGgQg7gmNPJs88xkbKcIL3NlcmSU=
 github.com/rymdport/portal v0.4.2/go.mod h1:kFF4jslnJ8pD5uCi17brj/ODlfIidOxlgUDTO5ncnC4=
+github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e h1:MRM5ITcdelLK2j1vwZ3Je0FKVCfqOLp5zO6trqMLYs0=
+github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e/go.mod h1:XV66xRDqSt+GTGFMVlhk3ULuV0y9ZmzeVGR4mloJI3M=
 github.com/spf13/cobra v1.10.2 h1:DMTTonx5m65Ic0GOoRY2c16WCbHxOOw6xxezuLaBpcU=
 github.com/spf13/cobra v1.10.2/go.mod h1:7C1pvHqHw5A4vrJfjNwvOdzYu0Gml16OCs2GRiTUUS4=
 github.com/spf13/pflag v1.0.9 h1:9exaQaMOCwffKiiiYk6/BndUBv+iRViNW+4lEMi0PvY=

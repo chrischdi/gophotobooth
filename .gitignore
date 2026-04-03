@@ -1,6 +1,9 @@
 # Binaries
 bin/
 
+# Release packages
+dist/
+
 # Generated protobuf/gRPC stubs
 proto/**/*.pb.go
 

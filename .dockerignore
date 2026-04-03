@@ -1,0 +1,21 @@
+# Build outputs
+bin/
+dist/
+
+# Git
+.git/
+
+# Development / tooling
+scripts/
+.claude/
+CLAUDE.md
+Makefile
+compose.yaml
+.golangci*
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~

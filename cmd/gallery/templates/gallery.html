@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Photo Booth Gallery</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; background: #111; color: #eee; font-family: sans-serif; }
+h1 { text-align: center; padding: 1rem; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 1rem; padding: 1rem; }
+.grid img { width: 100%; border-radius: 4px; display: block; cursor: pointer; }
+
+/* Lightbox */
+#lb { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 100; }
+#lb.open { display: flex; align-items: center; justify-content: center; }
+#lb img { max-width: 90vw; max-height: 90vh; object-fit: contain; user-select: none; }
+#lb-prev, #lb-next {
+  position: absolute; top: 0; height: 100%; width: 20%;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; opacity: 0; transition: opacity 0.2s;
+}
+#lb-prev { left: 0; }
+#lb-next { right: 0; }
+#lb:hover #lb-prev, #lb:hover #lb-next { opacity: 1; }
+#lb-prev span, #lb-next span {
+  font-size: 3rem; color: #fff; text-shadow: 0 0 8px #000;
+  pointer-events: none;
+}
+#lb-close {
+  position: absolute; top: 1rem; right: 1.5rem;
+  font-size: 2rem; cursor: pointer; color: #fff;
+  text-shadow: 0 0 8px #000; line-height: 1;
+  z-index: 10;
+}
+#lb-counter {
+  position: absolute; bottom: 1rem; left: 50%; transform: translateX(-50%);
+  color: #ccc; font-size: 0.9rem;
+}
+#lb-download {
+  position: absolute; top: 1rem; right: 4rem;
+  color: #fff; text-decoration: none;
+  background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3);
+  padding: 0.35rem 0.75rem; border-radius: 4px; font-size: 0.85rem;
+  z-index: 10;
+}
+#lb-download:hover { background: rgba(255,255,255,0.25); }
+</style>
+</head>
+<body>
+<h1>Photo Gallery</h1>
+<div class="grid">
+{{range $i, $p := .Photos}}
+<img src="/thumb/{{$p.Name}}" loading="lazy" alt="{{$p.Name}}" data-index="{{$i}}">
+{{end}}
+</div>
+<p style="text-align:center;color:#555">{{.Count}} photo(s) &mdash; last updated {{.Updated}}</p>
+
+<div id="lb">
+  <img id="lb-img" src="" alt="">
+  <div id="lb-prev"><span>&#8592;</span></div>
+  <div id="lb-next"><span>&#8594;</span></div>
+  <div id="lb-close">&#x2715;</div>
+  <div id="lb-counter"></div>
+  <a id="lb-download" href="" download>&#x2B07; Download HD</a>
+</div>
+
+<script>
+const photos = [{{range .Photos}}"{{.Name}}",{{end}}];
+const lb     = document.getElementById('lb');
+const lbImg  = document.getElementById('lb-img');
+const lbCtr  = document.getElementById('lb-counter');
+const lbDl   = document.getElementById('lb-download');
+let current  = 0;
+
+function show(i) {
+  current = (i + photos.length) % photos.length;
+  lbImg.src = '/preview/' + photos[current];
+  lbDl.href = '/photo/' + photos[current];
+  lbDl.download = photos[current];
+  lbCtr.textContent = (current + 1) + ' / ' + photos.length;
+  lb.classList.add('open');
+  history.replaceState(null, '', '#' + encodeURIComponent(photos[current]));
+}
+
+function close() {
+  lb.classList.remove('open');
+  lbImg.src = '';
+  history.replaceState(null, '', location.pathname);
+}
+
+document.querySelectorAll('.grid img').forEach(img => {
+  img.addEventListener('click', () => show(Number(img.dataset.index)));
+});
+
+document.getElementById('lb-prev').addEventListener('click', () => show(current - 1));
+document.getElementById('lb-next').addEventListener('click', () => show(current + 1));
+document.getElementById('lb-close').addEventListener('click', close);
+
+lb.addEventListener('click', e => { if (e.target === lb || e.target === lbImg) close(); });
+
+document.addEventListener('keydown', e => {
+  if (!lb.classList.contains('open')) return;
+  if (e.key === 'ArrowLeft')  show(current - 1);
+  if (e.key === 'ArrowRight') show(current + 1);
+  if (e.key === 'Escape')     close();
+});
+
+(function openFromHash() {
+  const name = decodeURIComponent(location.hash.slice(1));
+  if (!name) return;
+  const i = photos.indexOf(name);
+  if (i !== -1) show(i);
+})();
+</script>
+</body>
+</html>

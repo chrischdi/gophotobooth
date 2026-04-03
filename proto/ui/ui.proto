@@ -9,9 +9,6 @@ import "google/protobuf/empty.proto";
 // UI controls what is shown on the photo booth display.
 // Core calls these RPCs during the photo workflow.
 service UI {
-    // ShowIdle displays the idle/welcome screen. Called once at Core startup.
-    rpc ShowIdle(google.protobuf.Empty) returns (google.protobuf.Empty);
-
     // ShowCountdown displays a countdown digit (3, 2, or 1).
     rpc ShowCountdown(CountdownRequest) returns (google.protobuf.Empty);
 
@@ -35,6 +32,9 @@ message ShowImageRequest {
     bytes image_bytes = 1;
     // format is the MIME type, e.g. "image/jpeg".
     string format = 2;
+    // photo_url is the full gallery deep-link URL for this photo (optional).
+    // When non-empty, the UI overlays a QR code linking to the gallery.
+    string photo_url = 3;
 }
 
 message ShowErrorRequest {

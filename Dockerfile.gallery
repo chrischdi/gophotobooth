@@ -2,11 +2,14 @@ FROM golang:1.26.1 AS builder
 ARG TARGETARCH
 WORKDIR /src
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,id=gophotobooth-gomod,target=/go/pkg/mod \
+    go mod download
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -o /gallery ./cmd/gallery
+RUN --mount=type=cache,id=gophotobooth-gomod,target=/go/pkg/mod \
+    --mount=type=cache,id=gophotobooth-gobuild,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -o /gallery ./cmd/gallery
 
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libvips-tools \
     && rm -rf /var/lib/apt/lists/*

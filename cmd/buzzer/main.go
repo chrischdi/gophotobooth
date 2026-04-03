@@ -51,7 +51,7 @@ func main() {
 			if err != nil {
 				return fmt.Errorf("connect Core %s: %w", coreAddr, err)
 			}
-			defer conn.Close()
+			defer conn.Close() //nolint:errcheck
 
 			slog.Info("buzzer running", "pin", pinName, "core", coreAddr)
 			return run(b, pbcore.NewCoreClient(conn))

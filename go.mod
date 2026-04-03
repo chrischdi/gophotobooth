@@ -4,9 +4,11 @@ go 1.26.1
 
 require (
 	fyne.io/fyne/v2 v2.7.3
-	github.com/chrischdi/gphoto2go v0.0.0-20190929130056-e614e412b281
+	github.com/chrischdi/gphoto2go v0.0.0-20260403080911-d3304d2681d5
 	github.com/fsnotify/fsnotify v1.9.0
+	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	github.com/spf13/cobra v1.10.2
+	github.com/stretchr/testify v1.11.1
 	golang.org/x/image v0.24.0
 	google.golang.org/grpc v1.79.3
 	google.golang.org/protobuf v1.36.11
@@ -41,7 +43,6 @@ require (
 	github.com/spf13/pflag v1.0.9 // indirect
 	github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c // indirect
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef // indirect
-	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/yuin/goldmark v1.7.8 // indirect
 	golang.org/x/net v0.48.0 // indirect
 	golang.org/x/sys v0.39.0 // indirect

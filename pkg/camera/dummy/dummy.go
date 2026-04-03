@@ -55,7 +55,7 @@ func (c *Camera) TakePhoto() (*camera.Photo, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer largeFace.Close()
+	defer largeFace.Close() //nolint:errcheck
 
 	// Small face for the "DUMMY" label.
 	smallFace, err := opentype.NewFace(ttf, &opentype.FaceOptions{
@@ -65,7 +65,7 @@ func (c *Camera) TakePhoto() (*camera.Photo, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer smallFace.Close()
+	defer smallFace.Close() //nolint:errcheck
 
 	// Draw "DUMMY" label near top-center.
 	label := "DUMMY"

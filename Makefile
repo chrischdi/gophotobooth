@@ -2,6 +2,10 @@ GOFLAGS ?=
 GOARCH_ARM64 = arm64
 GOOS_LINUX   = linux
 TARGET_ARCH  ?= $(shell go env GOARCH)
+PACKAGE_ARCH ?= arm64
+DIST_DIR      = dist
+
+CONTAINER_TOOL ?= docker
 
 GOLANGCI_LINT_VERSION = v2.11.3
 TOOLS_BIN_DIR         = bin/tools-$(shell go env GOVERSION)
@@ -11,7 +15,7 @@ SERVICES = core ui dslr buzzer gallery ctl
 
 PROTO_DIRS = proto/core proto/ui proto/dslr
 
-.PHONY: all build build-arm64 generate test vet lint golangci-lint image run-dummy clean $(addprefix image-,$(SERVICES))
+.PHONY: all build build-arm64 generate test vet lint golangci-lint image package run-dummy e2e test-hardware test-hardware-buzzer test-hardware-camera test-manual clean $(addprefix image-,$(SERVICES))
 
 all: build
 
@@ -60,9 +64,9 @@ build-arm64:
 		CC=aarch64-linux-gnu-gcc \
 		go build $(GOFLAGS) -o bin/arm64/ui ./cmd/ui
 
-## Run tests
+## Run tests (CGO-free packages only; cmd/dslr and cmd/ui require CGO and are skipped)
 test:
-	go test ./...
+	CGO_ENABLED=0 go test $(shell CGO_ENABLED=0 go list ./... 2>/dev/null | grep -v 'cmd/dslr\b' | grep -v 'cmd/ui\b')
 
 ## Run go vet
 vet:
@@ -87,14 +91,59 @@ image: $(addprefix image-,$(SERVICES))
 ## Build a single container image: make image-<service>
 $(addprefix image-,$(SERVICES)): image-%:
 	@echo "==> Building gophotobooth-$* ($(TARGET_ARCH))"
-	podman build --platform linux/$(TARGET_ARCH) -f Dockerfile.$* -t gophotobooth-$* .
+	$(CONTAINER_TOOL) build --platform linux/$(TARGET_ARCH) -f Dockerfile.$* -t gophotobooth-$* .
+
+## Build all images for PACKAGE_ARCH (default: arm64) and bundle into a tarball
+## Output: dist/gophotobooth-<arch>.tar.gz
+## Contents: images.tar (podman load), compose.yaml, scripts/
+package:
+	@if [ "$$(uname -m)" = "x86_64" ] && [ "$(PACKAGE_ARCH)" = "arm64" ]; then \
+		if [ ! -f /proc/sys/fs/binfmt_misc/qemu-aarch64 ]; then \
+			echo "ERROR: binfmt_misc support for aarch64 is not available."; \
+			echo "       Run: docker run --privileged --rm docker.io/tonistiigi/binfmt --install arm64"; \
+			exit 1; \
+		fi \
+	fi
+	@$(MAKE) image TARGET_ARCH=$(PACKAGE_ARCH)
+	@echo "==> Packaging for $(PACKAGE_ARCH)"
+	@mkdir -p $(DIST_DIR)
+	@stage=$$(mktemp -d); \
+	$(CONTAINER_TOOL) save -o $$stage/images.tar $(foreach svc,$(SERVICES),gophotobooth-$(svc)); \
+	cp compose.yaml $$stage/; \
+	cp -r scripts/ $$stage/scripts/; \
+	tar -czf $(DIST_DIR)/gophotobooth-$(PACKAGE_ARCH).tar.gz -C $$stage .; \
+	rm -rf $$stage
+	@echo "==> $(DIST_DIR)/gophotobooth-$(PACKAGE_ARCH).tar.gz"
 
 ## Start all services locally with dummy camera + ctl trigger for debugging
 run-dummy:
-	podman compose --file compose.yaml --profile no-hardware up
+	$(CONTAINER_TOOL) compose --file compose.yaml --profile no-hardware up
+
+## Run end-to-end tests using real CGO-free binaries (requires make build first)
+e2e: build
+	@echo "==> Running E2E tests"
+	bash scripts/e2e.sh
+
+## Run hardware-tagged Go tests (requires GPIO button + camera hardware)
+test-hardware: test-hardware-buzzer test-hardware-camera
+
+## Run hardware-tagged Go tests for the buzzer (requires GPIO button)
+test-hardware-buzzer:
+	@echo "==> Running hardware Go tests (buzzer)"
+	CGO_ENABLED=1 go test -tags hardware -v ./cmd/buzzer/
+
+## Run hardware-tagged Go tests for the camera (requires DSLR camera)
+test-hardware-camera:
+	@echo "==> Running hardware Go tests (camera)"
+	CGO_ENABLED=1 go test -tags hardware -v ./cmd/dslr/
+
+## Interactive manual test checklist for the full hardware stack
+test-manual:
+	@echo "==> Running manual hardware tests"
+	bash scripts/test-manual.sh
 
 clean:
-	rm -rf bin/
+	rm -rf bin/ $(DIST_DIR)/
 	@for dir in $(PROTO_DIRS); do \
 		rm -f $$dir/*.pb.go; \
 	done

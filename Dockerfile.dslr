@@ -6,12 +6,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,id=gophotobooth-gomod,target=/go/pkg/mod \
+    go mod download
 COPY . .
-RUN CGO_ENABLED=1 GOOS=linux GOARCH=${TARGETARCH} go build -o /dslr ./cmd/dslr
+RUN --mount=type=cache,id=gophotobooth-gomod,target=/go/pkg/mod \
+    --mount=type=cache,id=gophotobooth-gobuild,target=/root/.cache/go-build \
+    CGO_ENABLED=1 GOOS=linux GOARCH=${TARGETARCH} go build -o /dslr ./cmd/dslr
 
 # Runtime stage — only needs libgphoto2 runtime libraries.
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgphoto2-6 \
     libgphoto2-port12 \

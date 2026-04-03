@@ -3,7 +3,7 @@
 package main
 
 import (
-	"crypto/sha256"
+	_ "embed"
 	"fmt"
 	"html/template"
 	"log/slog"
@@ -17,112 +17,12 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/cobra"
+
+	"github.com/chrischdi/gophotobooth/internal/galleryurl"
 )
 
-const galleryTpl = `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Photo Booth Gallery</title>
-<style>
-* { box-sizing: border-box; }
-body { margin: 0; background: #111; color: #eee; font-family: sans-serif; }
-h1 { text-align: center; padding: 1rem; }
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; padding: 1rem; }
-.grid img { width: 100%; border-radius: 4px; display: block; cursor: pointer; }
-
-/* Lightbox */
-#lb { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 100; }
-#lb.open { display: flex; align-items: center; justify-content: center; }
-#lb img { max-width: 90vw; max-height: 90vh; object-fit: contain; user-select: none; }
-#lb-prev, #lb-next {
-  position: absolute; top: 0; height: 100%; width: 20%;
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer; opacity: 0; transition: opacity 0.2s;
-}
-#lb-prev { left: 0; }
-#lb-next { right: 0; }
-#lb:hover #lb-prev, #lb:hover #lb-next { opacity: 1; }
-#lb-prev span, #lb-next span {
-  font-size: 3rem; color: #fff; text-shadow: 0 0 8px #000;
-  pointer-events: none;
-}
-#lb-close {
-  position: absolute; top: 1rem; right: 1.5rem;
-  font-size: 2rem; cursor: pointer; color: #fff;
-  text-shadow: 0 0 8px #000; line-height: 1;
-}
-#lb-counter {
-  position: absolute; bottom: 1rem; left: 50%; transform: translateX(-50%);
-  color: #ccc; font-size: 0.9rem;
-}
-#lb-download {
-  position: absolute; bottom: 1rem; right: 1.5rem;
-  color: #fff; text-decoration: none;
-  background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3);
-  padding: 0.35rem 0.75rem; border-radius: 4px; font-size: 0.85rem;
-}
-#lb-download:hover { background: rgba(255,255,255,0.25); }
-</style>
-</head>
-<body>
-<h1>Photo Gallery</h1>
-<div class="grid">
-{{range $i, $p := .Photos}}
-<img src="/thumb/{{$p.Name}}" loading="lazy" alt="{{$p.Name}}" data-index="{{$i}}">
-{{end}}
-</div>
-<p style="text-align:center;color:#555">{{.Count}} photo(s) &mdash; last updated {{.Updated}}</p>
-
-<div id="lb">
-  <img id="lb-img" src="" alt="">
-  <div id="lb-prev"><span>&#8592;</span></div>
-  <div id="lb-next"><span>&#8594;</span></div>
-  <div id="lb-close">&#x2715;</div>
-  <div id="lb-counter"></div>
-  <a id="lb-download" href="" download>&#x2B07; HD</a>
-</div>
-
-<script>
-const photos = [{{range .Photos}}"{{.Name}}",{{end}}];
-const lb     = document.getElementById('lb');
-const lbImg  = document.getElementById('lb-img');
-const lbCtr  = document.getElementById('lb-counter');
-const lbDl   = document.getElementById('lb-download');
-let current  = 0;
-
-function show(i) {
-  current = (i + photos.length) % photos.length;
-  lbImg.src = '/preview/' + photos[current];
-  lbDl.href = '/photo/' + photos[current];
-  lbDl.download = photos[current];
-  lbCtr.textContent = (current + 1) + ' / ' + photos.length;
-  lb.classList.add('open');
-}
-
-function close() { lb.classList.remove('open'); lbImg.src = ''; }
-
-document.querySelectorAll('.grid img').forEach(img => {
-  img.addEventListener('click', () => show(Number(img.dataset.index)));
-});
-
-document.getElementById('lb-prev').addEventListener('click', () => show(current - 1));
-document.getElementById('lb-next').addEventListener('click', () => show(current + 1));
-document.getElementById('lb-close').addEventListener('click', close);
-
-lb.addEventListener('click', e => { if (e.target === lb || e.target === lbImg) close(); });
-
-document.addEventListener('keydown', e => {
-  if (!lb.classList.contains('open')) return;
-  if (e.key === 'ArrowLeft')  show(current - 1);
-  if (e.key === 'ArrowRight') show(current + 1);
-  if (e.key === 'Escape')     close();
-});
-</script>
-</body>
-</html>`
-
+//go:embed templates/gallery.html
+var galleryTpl string
 type galleryData struct {
 	Photos  []photoEntry
 	Count   int
@@ -156,26 +56,9 @@ func listPhotos(dir string) ([]photoEntry, error) {
 	return photos, nil
 }
 
-func oldestPhotoName(dir string) (string, error) {
-	photos, err := listPhotos(dir)
-	if err != nil {
-		return "", err
-	}
-	if len(photos) == 0 {
-		return "", nil
-	}
-	// listPhotos returns newest-first; oldest is last.
-	return photos[len(photos)-1].Name, nil
-}
-
-func hashPrefix(name string) string {
-	sum := sha256.Sum256([]byte(name))
-	return fmt.Sprintf("%x", sum[:8]) // 16 hex chars
-}
-
 // waitForFirstPhoto blocks until at least one photo exists in dir.
 func waitForFirstPhoto(dir string) (string, error) {
-	name, err := oldestPhotoName(dir)
+	name, err := galleryurl.OldestPhotoName(dir)
 	if err != nil {
 		return "", err
 	}
@@ -187,7 +70,7 @@ func waitForFirstPhoto(dir string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer watcher.Close()
+	defer watcher.Close() //nolint:errcheck
 
 	if err := watcher.Add(dir); err != nil {
 		return "", err
@@ -200,13 +83,108 @@ func waitForFirstPhoto(dir string) (string, error) {
 			if !ok {
 				return "", fmt.Errorf("watcher closed")
 			}
-			name, err := oldestPhotoName(dir)
+			name, err := galleryurl.OldestPhotoName(dir)
 			if err != nil || name == "" {
 				continue
 			}
 			return name, nil
 		case err := <-watcher.Errors:
 			return "", err
+		}
+	}
+}
+
+// thumbWidthSmall and thumbWidthLarge are the two cached sizes (pixels wide).
+const (
+	thumbWidthSmall = 400
+	thumbWidthLarge = 1280
+)
+
+// cleanStaleCache removes cached thumbnails whose source photo no longer exists.
+func cleanStaleCache(photoDir, cacheDir string) {
+	for _, width := range []int{thumbWidthSmall, thumbWidthLarge} {
+		widthDir := filepath.Join(cacheDir, fmt.Sprintf("%d", width))
+		entries, err := os.ReadDir(widthDir)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			slog.Error("cache cleanup: read dir", "dir", widthDir, "err", err)
+			continue
+		}
+		for _, e := range entries {
+			if e.IsDir() {
+				continue
+			}
+			if _, err := os.Stat(filepath.Join(photoDir, e.Name())); os.IsNotExist(err) {
+				p := filepath.Join(widthDir, e.Name())
+				slog.Info("removing stale cache entry", "name", e.Name(), "width", width)
+				if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
+					slog.Error("cache cleanup: remove", "path", p, "err", err)
+				}
+			}
+		}
+	}
+}
+
+// preFillCache generates missing thumbnails for all photos already on disk.
+func preFillCache(photoDir, cacheDir string) {
+	photos, err := listPhotos(photoDir)
+	if err != nil {
+		slog.Error("pre-fill: list photos", "err", err)
+		return
+	}
+	for _, p := range photos {
+		for _, width := range []int{thumbWidthSmall, thumbWidthLarge} {
+			srcPath := filepath.Join(photoDir, p.Name)
+			dstPath := filepath.Join(cacheDir, fmt.Sprintf("%d", width), p.Name)
+			if _, err := os.Stat(dstPath); os.IsNotExist(err) {
+				slog.Info("pre-filling cache", "name", p.Name, "width", width)
+				if err := generateThumbnail(srcPath, dstPath, width); err != nil {
+					slog.Error("pre-fill thumbnail failed", "name", p.Name, "width", width, "err", err)
+				}
+			}
+		}
+	}
+}
+
+// watchAndFillCache watches photoDir and proactively generates thumbnails for new photos.
+func watchAndFillCache(photoDir, cacheDir string) {
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		slog.Error("cache watcher: create", "err", err)
+		return
+	}
+	defer watcher.Close() //nolint:errcheck
+
+	if err := watcher.Add(photoDir); err != nil {
+		slog.Error("cache watcher: add dir", "err", err)
+		return
+	}
+
+	for {
+		select {
+		case event, ok := <-watcher.Events:
+			if !ok {
+				return
+			}
+			if event.Op&fsnotify.Create == 0 {
+				continue
+			}
+			name := filepath.Base(event.Name)
+			ext := strings.ToLower(filepath.Ext(name))
+			if ext != ".jpg" && ext != ".jpeg" && ext != ".png" {
+				continue
+			}
+			for _, width := range []int{thumbWidthSmall, thumbWidthLarge} {
+				dstPath := filepath.Join(cacheDir, fmt.Sprintf("%d", width), name)
+				slog.Info("proactive cache fill", "name", name, "width", width)
+				if err := generateThumbnail(event.Name, dstPath, width); err != nil {
+					slog.Error("proactive thumbnail failed", "name", name, "width", width, "err", err)
+				}
+			}
+		case err := <-watcher.Errors:
+			slog.Error("cache watcher error", "err", err)
 		}
 	}
 }
@@ -272,29 +250,34 @@ func main() {
 				return fmt.Errorf("parse template: %w", err)
 			}
 
+			cleanStaleCache(photoDir, cacheDir)
+
 			firstName, err := waitForFirstPhoto(photoDir)
 			if err != nil {
 				return fmt.Errorf("waiting for first photo: %w", err)
 			}
-			prefix := hashPrefix(firstName)
+			prefix := galleryurl.HashPrefix(firstName)
 			galleryPath := "/g/" + prefix + "/"
 
 			slog.Info("gallery URL ready", "path", galleryPath, "addr", listenAddr)
+
+			go preFillCache(photoDir, cacheDir)
+			go watchAndFillCache(photoDir, cacheDir)
 
 			mux := http.NewServeMux()
 
 			// robots.txt — block all crawlers.
 			mux.HandleFunc("/robots.txt", func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "text/plain")
-				fmt.Fprintln(w, "User-agent: *\nDisallow: /")
+				fmt.Fprintln(w, "User-agent: *\nDisallow: /") //nolint:errcheck
 			})
 
 			// Serve individual photos (full HD).
 			mux.Handle("/photo/", http.StripPrefix("/photo/", http.FileServer(http.Dir(photoDir))))
 
-			// Serve thumbnails (400px) and previews (1280px) via vipsthumbnail.
-			mux.HandleFunc("/thumb/", serveResized(photoDir, cacheDir, 400))
-			mux.HandleFunc("/preview/", serveResized(photoDir, cacheDir, 1280))
+			// Serve thumbnails and previews via vipsthumbnail.
+			mux.HandleFunc("/thumb/", serveResized(photoDir, cacheDir, thumbWidthSmall))
+			mux.HandleFunc("/preview/", serveResized(photoDir, cacheDir, thumbWidthLarge))
 
 			// Gallery page at the obscure path.
 			mux.HandleFunc(galleryPath, func(w http.ResponseWriter, r *http.Request) {
