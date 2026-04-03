@@ -154,8 +154,8 @@ GALLERY_BASE_URL=http://raspberrypi.local:8080
 BUZZER_PIN=
 
 # Storage directories (created automatically if missing)
-PHOTOS_DIR=/var/lib/gophotobooth/photos
-CACHE_DIR=/var/lib/gophotobooth/cache
+PHOTOS_DIR=/data/photos
+CACHE_DIR=/data/cache
 EOF
     chmod 644 "$cfg"
 }
@@ -191,7 +191,7 @@ Wants=systemd-udev-settle.service
 StartLimitIntervalSec=0
 
 [Service]
-ExecStart=/usr/bin/Xorg :0 -ac -nolisten tcp vt7
+ExecStart=/usr/bin/Xorg :0 -ac -nolisten tcp -dpms vt7
 Restart=always
 RestartSec=1
 StandardOutput=journal
