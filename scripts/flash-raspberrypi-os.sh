@@ -10,11 +10,11 @@
 #                                 before install.sh runs.
 #   --hostname <name>             System hostname (default: fotobox)
 #   --user <username> <password>  OS user account (default: pi / raspberry).
-#   --wifi <ssid> <password>      Pre-configure a WiFi network (repeatable).
-#                                 Written as a NetworkManager connection file.
-#                                 WARNING: password is stored as plain text in the image.
 #   --env <file>                  Custom env file to place on the boot partition as gophotobooth.env.
 #                                 Defaults to env.sample from the package tarball (or repo).
+#                                 Set WIFI_SSID_1 / WIFI_PASSWORD_1 (and _2, _3, …) here to
+#                                 pre-configure WiFi. install.sh writes the NM connection files
+#                                 on first boot before apt-get runs.
 #   --keep-image                  Keep the downloaded .img.xz in /tmp after flashing.
 #
 # The script will:
@@ -22,7 +22,7 @@
 #   2. Flash it to <device>
 #   3. Resize partition 2 (ext4 root) to 32 GiB
 #   4. Add partition 3 (exFAT, remaining space) for photo storage
-#   5. Inject firstrun.sh + firstrun.service and WiFi config on the root partition
+#   5. Inject firstrun.sh + firstrun.service on the root partition
 #   6. Write userconf.txt, ssh, config.txt tweaks and install.sh to the boot partition
 
 set -euo pipefail
@@ -42,8 +42,6 @@ KEEP_IMAGE=false
 HOSTNAME_VAL="fotobox"
 USER_NAME="pi"
 USER_PASSWORD="raspberry"
-WIFI_SSIDS=()
-WIFI_PASSWORDS=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -61,12 +59,6 @@ while [[ $# -gt 0 ]]; do
             [[ $# -ge 3 ]] || { echo "ERROR: --user requires <username> and <password>" >&2; exit 1; }
             USER_NAME="$2"
             USER_PASSWORD="$3"
-            shift 3
-            ;;
-        --wifi)
-            [[ $# -ge 3 ]] || { echo "ERROR: --wifi requires <ssid> and <password>" >&2; exit 1; }
-            WIFI_SSIDS+=("$2")
-            WIFI_PASSWORDS+=("$3")
             shift 3
             ;;
         --env)
@@ -134,6 +126,7 @@ trap cleanup EXIT INT TERM
 [[ -b "$DEVICE" ]] || error "$DEVICE is not a block device"
 [[ -n "$PACKAGE" && ! -f "$PACKAGE" ]] && error "Package not found: $PACKAGE"
 [[ -n "$ENV_FILE" && ! -f "$ENV_FILE" ]] && error "Env file not found: $ENV_FILE"
+
 
 for tool in curl xzcat dd mount partprobe parted e2fsck resize2fs mkfs.exfat openssl; do
     command -v "$tool" &>/dev/null || error "Required tool not found: $tool (install the package that provides it)"
@@ -234,43 +227,6 @@ UNIT
 
 sudo ln -sf /etc/systemd/system/firstrun.service \
     "$MOUNT_ROOT/etc/systemd/system/multi-user.target.wants/firstrun.service"
-
-if [[ ${#WIFI_SSIDS[@]} -gt 0 ]]; then
-    info "Writing NetworkManager WiFi connection files..."
-    sudo mkdir -p "$MOUNT_ROOT/etc/NetworkManager/system-connections"
-    for i in "${!WIFI_SSIDS[@]}"; do
-        local_ssid="${WIFI_SSIDS[$i]}"
-        local_pass="${WIFI_PASSWORDS[$i]}"
-        local_file="$MOUNT_ROOT/etc/NetworkManager/system-connections/${local_ssid}.nmconnection"
-        sudo tee "$local_file" > /dev/null <<EOF
-[connection]
-id=${local_ssid}
-type=wifi
-autoconnect=true
-
-[wifi]
-mode=infrastructure
-ssid=${local_ssid}
-
-[wifi-security]
-auth-alg=open
-key-mgmt=wpa-psk
-psk=${local_pass}
-
-[ipv4]
-method=auto
-
-[ipv6]
-addr-gen-mode=default
-method=auto
-EOF
-        sudo chmod 600 "$local_file"
-    done
-
-    info "Enabling NetworkManager..."
-    sudo ln -sf /lib/systemd/system/NetworkManager.service \
-        "$MOUNT_ROOT/etc/systemd/system/multi-user.target.wants/NetworkManager.service"
-fi
 
 sudo umount "$MOUNT_ROOT"
 rmdir "$MOUNT_ROOT"

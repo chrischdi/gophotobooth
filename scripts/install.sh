@@ -13,8 +13,9 @@
 #   3. Installs Xorg, podman, and network-manager
 #   4. Installs Tailscale (via official install script)
 #   5. Creates /etc/gophotobooth/env for per-site configuration
-#   6. Loads container images from images.tar
-#   7. Installs and enables systemd units for all services
+#   6. Installs ctl binary to /usr/local/bin
+#   7. Loads container images from images.tar
+#   8. Installs and enables systemd units for all services
 #
 # After installation, edit /etc/gophotobooth/env to set:
 #   GALLERY_BASE_URL  — public URL of this Pi, e.g. http://192.168.1.42:8080
@@ -72,8 +73,52 @@ configure_hostname() {
 # ---------------------------------------------------------------------------
 # 2. Network
 # ---------------------------------------------------------------------------
+configure_wifi() {
+    local cfg=/etc/gophotobooth/env
+    local n=1
+    while true; do
+        local ssid pass
+        ssid=$(grep -E "^WIFI_SSID_${n}=.+" "$cfg" 2>/dev/null | cut -d= -f2- || true)
+        pass=$(grep -E "^WIFI_PASSWORD_${n}=.+" "$cfg" 2>/dev/null | cut -d= -f2- || true)
+        [[ -n "$ssid" ]] || break
+        local file="/etc/NetworkManager/system-connections/${ssid}.nmconnection"
+        if [[ -f "$file" ]]; then
+            info "NM connection '$ssid' already exists — skipping."
+        else
+            info "Writing NM connection for SSID: $ssid"
+            mkdir -p /etc/NetworkManager/system-connections
+            cat > "$file" <<EOF
+[connection]
+id=${ssid}
+type=wifi
+autoconnect=true
+
+[wifi]
+mode=infrastructure
+ssid=${ssid}
+
+[wifi-security]
+auth-alg=open
+key-mgmt=wpa-psk
+psk=${pass}
+
+[ipv4]
+method=auto
+
+[ipv6]
+addr-gen-mode=default
+method=auto
+EOF
+            chmod 600 "$file"
+        fi
+        (( n++ ))
+    done
+}
+
 enable_network() {
-    info "Enabling Wifi via NetworkManager…"
+    configure_wifi
+    info "Enabling WiFi via NetworkManager…"
+    systemctl enable --now NetworkManager
     nmcli radio wifi on
     nmcli device set wlan0 managed yes
 }
@@ -161,6 +206,16 @@ configure_ssh_key() {
 }
 
 tailscale_up() {
+    local state_b64
+    state_b64=$(grep -E '^TAILSCALE_STATE=.+' /etc/gophotobooth/env 2>/dev/null | cut -d= -f2- || true)
+    if [[ -n "$state_b64" ]]; then
+        info "Restoring Tailscale node identity from TAILSCALE_STATE…"
+        mkdir -p /var/lib/tailscale
+        echo "$state_b64" | base64 -d > /var/lib/tailscale/tailscaled.state
+        chmod 600 /var/lib/tailscale/tailscaled.state
+        systemctl enable --now tailscaled
+        return
+    fi
     local key
     key=$(grep -E '^TAILSCALE_AUTH_KEY=.+' /etc/gophotobooth/env 2>/dev/null | cut -d= -f2- || true)
     if [[ -z "$key" ]]; then
@@ -196,6 +251,11 @@ BUZZER_PIN=
 # Cloudflare Tunnel token. Leave empty to disable cloudflared.
 CLOUDFLARED_TOKEN=
 
+# WiFi network(s) to pre-configure on first boot. Repeat with _2, _3, … for multiple networks.
+# Leave empty to skip (e.g. when using Ethernet).
+WIFI_SSID_1=
+WIFI_PASSWORD_1=
+
 # Storage directories (created automatically if missing)
 PHOTOS_DIR=/data/photos
 CACHE_DIR=/data/cache
@@ -204,7 +264,17 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
-# 6. Load container images
+# 6. Install ctl binary
+# ---------------------------------------------------------------------------
+install_ctl() {
+    local bin="$TARBALL_DIR/ctl"
+    [[ -f $bin ]] || error "ctl binary not found at $bin"
+    info "Installing ctl to /usr/local/bin/ctl…"
+    install -m 0755 "$bin" /usr/local/bin/ctl
+}
+
+# ---------------------------------------------------------------------------
+# 7. Load container images
 # ---------------------------------------------------------------------------
 load_images() {
     local tar="$TARBALL_DIR/images.tar"
@@ -214,7 +284,7 @@ load_images() {
 }
 
 # ---------------------------------------------------------------------------
-# 7. Systemd units
+# 8. Systemd units
 # ---------------------------------------------------------------------------
 SYSTEMD_DIR=/etc/systemd/system
 
@@ -422,7 +492,7 @@ WantedBy=multi-user.target'
 }
 
 # ---------------------------------------------------------------------------
-# 8. Enable and start services
+# 9. Enable and start services
 # ---------------------------------------------------------------------------
 enable_services() {
     info "Reloading systemd…"
@@ -466,6 +536,7 @@ install_tailscale
 write_env_file
 configure_ssh_key
 tailscale_up
+install_ctl
 load_images
 install_units
 enable_services
