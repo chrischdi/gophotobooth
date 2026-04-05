@@ -132,6 +132,46 @@ install_tailscale() {
     apt-get install -y --no-install-recommends tailscale
 }
 
+configure_ssh_key() {
+    local key
+    key=$(grep -E '^SSH_AUTHORIZED_KEY=.+' /etc/gophotobooth/env 2>/dev/null | cut -d= -f2- || true)
+    if [[ -z "$key" ]]; then
+        info "SSH_AUTHORIZED_KEY not set — skipping."
+        return
+    fi
+    info "Installing SSH authorized key…"
+    local users
+    # Always configure root; also configure the first non-system user (UID 1000–60000).
+    users=("root")
+    local primary_user
+    primary_user=$(getent passwd | awk -F: '$3 >= 1000 && $3 < 60000 {print $1; exit}')
+    [[ -n "$primary_user" ]] && users+=("$primary_user")
+    for user in "${users[@]}"; do
+        local home
+        home=$(getent passwd "$user" | cut -d: -f6)
+        mkdir -p "$home/.ssh"
+        chmod 700 "$home/.ssh"
+        if ! grep -qxF "$key" "$home/.ssh/authorized_keys" 2>/dev/null; then
+            echo "$key" >> "$home/.ssh/authorized_keys"
+        fi
+        chmod 600 "$home/.ssh/authorized_keys"
+        chown -R "$user:" "$home/.ssh"
+        info "  → $home/.ssh/authorized_keys"
+    done
+}
+
+tailscale_up() {
+    local key
+    key=$(grep -E '^TAILSCALE_AUTH_KEY=.+' /etc/gophotobooth/env 2>/dev/null | cut -d= -f2- || true)
+    if [[ -z "$key" ]]; then
+        info "TAILSCALE_AUTH_KEY not set — skipping tailscale up."
+        return
+    fi
+    info "Bringing up Tailscale…"
+    systemctl enable --now tailscaled
+    tailscale up --authkey "$key"
+}
+
 # ---------------------------------------------------------------------------
 # 5. Configuration file
 # ---------------------------------------------------------------------------
@@ -152,6 +192,9 @@ GALLERY_BASE_URL=http://raspberrypi.local:8080
 
 # GPIO pin for the trigger button (e.g. GPIO17). Leave empty to disable buzzer.
 BUZZER_PIN=
+
+# Cloudflare Tunnel token. Leave empty to disable cloudflared.
+CLOUDFLARED_TOKEN=
 
 # Storage directories (created automatically if missing)
 PHOTOS_DIR=/data/photos
@@ -322,6 +365,33 @@ StandardError=journal
 [Install]
 WantedBy=multi-user.target'
 
+    # --- Cloudflared (optional tunnel) ---
+    write_unit photobooth-cloudflared.service '[Unit]
+Description=Cloudflare Tunnel for gophotobooth
+After=network.target
+ConditionPathExists=/etc/gophotobooth/env
+StartLimitIntervalSec=0
+
+[Service]
+EnvironmentFile=/etc/gophotobooth/env
+# Skip if CLOUDFLARED_TOKEN is unset or empty
+ExecCondition=/bin/sh -c '"'"'test -n "${CLOUDFLARED_TOKEN}"'"'"'
+ExecStartPre=-/usr/bin/podman rm -f photobooth-cloudflared
+ExecStart=podman run --rm \
+    --name photobooth-cloudflared \
+    --network host \
+    docker.io/cloudflare/cloudflared:2026.1.2 \
+    tunnel --no-autoupdate run --token ${CLOUDFLARED_TOKEN}
+Restart=always
+RestartSec=5
+RestartSteps=10
+RestartMaxDelaySec=300
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target'
+
     # --- Buzzer (optional GPIO button) ---
     write_unit photobooth-buzzer.service '[Unit]
 Description=gophotobooth buzzer service
@@ -372,6 +442,11 @@ enable_services() {
         services+=(photobooth-buzzer)
     fi
 
+    # Only enable cloudflared if CLOUDFLARED_TOKEN is set in the env file
+    if grep -qE '^CLOUDFLARED_TOKEN=.+' /etc/gophotobooth/env 2>/dev/null; then
+        services+=(photobooth-cloudflared)
+    fi
+
     for svc in "${services[@]}"; do
         info "Enabling and starting $svc…"
         systemctl enable "$svc"
@@ -389,6 +464,8 @@ install_packages
 configure_xorg
 install_tailscale
 write_env_file
+configure_ssh_key
+tailscale_up
 load_images
 install_units
 enable_services
@@ -396,9 +473,23 @@ enable_services
 info ""
 info "Installation complete."
 info ""
-info "Edit /etc/gophotobooth/env to set GALLERY_BASE_URL (and optionally BUZZER_PIN),"
-info "then restart services:"
-info "  sudo systemctl restart photobooth-core photobooth-buzzer"
+info "Edit /etc/gophotobooth/env to configure the installation:"
+info "  GALLERY_BASE_URL  — public URL for QR codes (e.g. https://photos.example.com)"
+info "  BUZZER_PIN        — GPIO pin (e.g. GPIO17), leave empty to disable"
+info "  CLOUDFLARED_TOKEN — Cloudflare Tunnel token, leave empty to disable"
+info "  TAILSCALE_AUTH_KEY  — Tailscale auth key for node registration, leave empty to skip"
+info "  SSH_AUTHORIZED_KEY  — SSH public key added to authorized_keys, leave empty to skip"
+info ""
+info "To set up the Cloudflare Tunnel (CLOUDFLARED_TOKEN):"
+info "  1. Go to Cloudflare Zero Trust → Networks → Tunnels → Create a tunnel"
+info "  2. Copy the tunnel token into CLOUDFLARED_TOKEN in /etc/gophotobooth/env"
+info "  3. In the tunnel's Public Hostnames tab, add:"
+info "       Hostname: photos.example.com"
+info "       Service:  http://localhost:8080"
+info "  4. In the Cloudflare dashboard set SSL/TLS mode to Full for your domain"
+info ""
+info "Then restart services:"
+info "  sudo systemctl restart photobooth-core photobooth-buzzer photobooth-cloudflared"
 info ""
 info "View logs:"
 info "  journalctl -u photobooth-core -f"

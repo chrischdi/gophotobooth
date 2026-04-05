@@ -51,7 +51,7 @@ h1 { text-align: center; padding: 1rem; }
 <h1>Photo Gallery</h1>
 <div class="grid">
 {{range $i, $p := .Photos}}
-<img src="/thumb/{{$p.Name}}" loading="lazy" alt="{{$p.Name}}" data-index="{{$i}}">
+<img src="/g/{{$.Prefix}}/thumb/{{$p.Name}}" loading="lazy" alt="{{$p.Name}}" data-index="{{$i}}">
 {{end}}
 </div>
 <p style="text-align:center;color:#555">{{.Count}} photo(s) &mdash; last updated {{.Updated}}</p>
@@ -67,6 +67,7 @@ h1 { text-align: center; padding: 1rem; }
 
 <script>
 const photos = [{{range .Photos}}"{{.Name}}",{{end}}];
+const galleryPrefix = '{{.Prefix}}';
 const lb     = document.getElementById('lb');
 const lbImg  = document.getElementById('lb-img');
 const lbCtr  = document.getElementById('lb-counter');
@@ -75,8 +76,8 @@ let current  = 0;
 
 function show(i) {
   current = (i + photos.length) % photos.length;
-  lbImg.src = '/preview/' + photos[current];
-  lbDl.href = '/photo/' + photos[current];
+  lbImg.src = '/g/' + galleryPrefix + '/preview/' + photos[current];
+  lbDl.href = '/g/' + galleryPrefix + '/photo/' + photos[current];
   lbDl.download = photos[current];
   lbCtr.textContent = (current + 1) + ' / ' + photos.length;
   lb.classList.add('open');

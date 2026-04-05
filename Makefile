@@ -13,6 +13,8 @@ GOLANGCI_LINT         = $(TOOLS_BIN_DIR)/golangci-lint-$(GOLANGCI_LINT_VERSION)
 
 SERVICES = core ui dslr buzzer gallery ctl
 
+THIRD_PARTY_IMAGES = docker.io/cloudflare/cloudflared:2026.1.2
+
 PROTO_DIRS = proto/core proto/ui proto/dslr
 
 .PHONY: all build build-arm64 generate test vet lint golangci-lint image package run-dummy e2e test-hardware test-hardware-buzzer test-hardware-camera test-manual clean $(addprefix image-,$(SERVICES))
@@ -105,12 +107,16 @@ package:
 		fi \
 	fi
 	@$(MAKE) image TARGET_ARCH=$(PACKAGE_ARCH)
+	@$(MAKE) build-arm64
 	@echo "==> Packaging for $(PACKAGE_ARCH)"
 	@mkdir -p $(DIST_DIR)
 	@stage=$$(mktemp -d); \
-	$(CONTAINER_TOOL) save -o $$stage/images.tar $(foreach svc,$(SERVICES),gophotobooth-$(svc)); \
+	$(CONTAINER_TOOL) pull --platform linux/$(PACKAGE_ARCH) $(THIRD_PARTY_IMAGES); \
+	$(CONTAINER_TOOL) save -o $$stage/images.tar $(foreach svc,$(SERVICES),gophotobooth-$(svc)) $(THIRD_PARTY_IMAGES); \
 	cp compose.yaml $$stage/; \
+	cp env.sample $$stage/; \
 	cp -r scripts/ $$stage/scripts/; \
+	cp bin/$(PACKAGE_ARCH)/ctl $$stage/ctl; \
 	tar -czf $(DIST_DIR)/gophotobooth-$(PACKAGE_ARCH).tar.gz -C $$stage .; \
 	rm -rf $$stage
 	@echo "==> $(DIST_DIR)/gophotobooth-$(PACKAGE_ARCH).tar.gz"

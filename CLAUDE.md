@@ -129,6 +129,18 @@ DSLR_ADDRESS=dslr-dummy:50002 podman compose --profile no-hardware up
 
 Defined in `internal/constants/constants.go`.
 
+## Public access via Cloudflare Tunnel
+
+The gallery is exposed publicly through a **Cloudflare Tunnel** (no open ports on the Pi):
+
+- `cloudflare/cloudflared:2026.1.2` runs as `photobooth-cloudflared.service`
+- Enabled by setting `CLOUDFLARED_TOKEN` in `/etc/gophotobooth/env`
+- The tunnel token is obtained from **Cloudflare Zero Trust → Networks → Tunnels**
+- In the tunnel's Public Hostnames tab, configure: `photos.example.com` → `http://localhost:8080`
+- Set SSL/TLS mode to **Full** in the Cloudflare dashboard (tunnel leg is already encrypted)
+- Cloudflare Universal SSL provides the public HTTPS certificate automatically — no Let's Encrypt needed
+- `GALLERY_BASE_URL` in the env file should be set to the public hostname (e.g. `https://photos.example.com`) so Core builds correct QR codes
+
 ## Linting
 
 ```bash

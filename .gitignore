@@ -17,3 +17,4 @@ proto/**/*.pb.go
 *.swp
 *.swo
 *~
+env.secret

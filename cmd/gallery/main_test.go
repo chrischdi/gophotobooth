@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -21,14 +22,16 @@ import (
 func testMux(photoDir, cacheDir, galleryPath string, tpl *template.Template) *http.ServeMux {
 	mux := http.NewServeMux()
 
+	prefix := strings.TrimSuffix(strings.TrimPrefix(galleryPath, "/g/"), "/")
+
 	mux.HandleFunc("/robots.txt", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		_, _ = w.Write([]byte("User-agent: *\nDisallow: /\n"))
 	})
 
-	mux.Handle("/photo/", http.StripPrefix("/photo/", http.FileServer(http.Dir(photoDir))))
-	mux.HandleFunc("/thumb/", serveResized(photoDir, cacheDir, 400))
-	mux.HandleFunc("/preview/", serveResized(photoDir, cacheDir, 1280))
+	mux.Handle(galleryPath+"photo/", http.StripPrefix(galleryPath+"photo/", http.FileServer(http.Dir(photoDir))))
+	mux.HandleFunc(galleryPath+"thumb/", serveResized(photoDir, cacheDir, 400))
+	mux.HandleFunc(galleryPath+"preview/", serveResized(photoDir, cacheDir, 1280))
 
 	mux.HandleFunc(galleryPath, func(w http.ResponseWriter, r *http.Request) {
 		photos, err := listPhotos(photoDir)
@@ -37,7 +40,7 @@ func testMux(photoDir, cacheDir, galleryPath string, tpl *template.Template) *ht
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_ = tpl.Execute(w, galleryData{Photos: photos, Count: len(photos)})
+		_ = tpl.Execute(w, galleryData{Photos: photos, Prefix: prefix, Count: len(photos)})
 	})
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -145,7 +148,7 @@ func TestPhotoHandler_ServesFile(t *testing.T) {
 
 	mux := testMux(photoDir, t.TempDir(), "/g/x/", parseTpl(t))
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest("GET", "/photo/photo.jpg", nil))
+	mux.ServeHTTP(rec, httptest.NewRequest("GET", "/g/x/photo/photo.jpg", nil))
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 	body, err := io.ReadAll(rec.Body)
@@ -165,7 +168,7 @@ func skipIfNoVips(t *testing.T) {
 func TestServeResized_BadExtension(t *testing.T) {
 	mux := testMux(t.TempDir(), t.TempDir(), "/g/x/", parseTpl(t))
 
-	for _, path := range []string{"/thumb/evil.sh", "/thumb/evil.exe", "/preview/script.py"} {
+	for _, path := range []string{"/g/x/thumb/evil.sh", "/g/x/thumb/evil.exe", "/g/x/preview/script.py"} {
 		rec := httptest.NewRecorder()
 		mux.ServeHTTP(rec, httptest.NewRequest("GET", path, nil))
 		assert.Equal(t, http.StatusNotFound, rec.Code, "path %s should return 404", path)
@@ -179,7 +182,7 @@ func TestServeResized_MissingSource(t *testing.T) {
 	mux := testMux(photoDir, cacheDir, "/g/x/", parseTpl(t))
 
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest("GET", "/thumb/nonexistent.jpg", nil))
+	mux.ServeHTTP(rec, httptest.NewRequest("GET", "/g/x/thumb/nonexistent.jpg", nil))
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
 

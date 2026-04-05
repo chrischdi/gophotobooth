@@ -25,6 +25,7 @@ import (
 var galleryTpl string
 type galleryData struct {
 	Photos  []photoEntry
+	Prefix  string
 	Count   int
 	Updated string
 }
@@ -272,12 +273,10 @@ func main() {
 				fmt.Fprintln(w, "User-agent: *\nDisallow: /") //nolint:errcheck
 			})
 
-			// Serve individual photos (full HD).
-			mux.Handle("/photo/", http.StripPrefix("/photo/", http.FileServer(http.Dir(photoDir))))
-
-			// Serve thumbnails and previews via vipsthumbnail.
-			mux.HandleFunc("/thumb/", serveResized(photoDir, cacheDir, thumbWidthSmall))
-			mux.HandleFunc("/preview/", serveResized(photoDir, cacheDir, thumbWidthLarge))
+			// Serve individual photos, thumbnails, and previews under the obscure prefix.
+			mux.Handle(galleryPath+"photo/", http.StripPrefix(galleryPath+"photo/", http.FileServer(http.Dir(photoDir))))
+			mux.HandleFunc(galleryPath+"thumb/", serveResized(photoDir, cacheDir, thumbWidthSmall))
+			mux.HandleFunc(galleryPath+"preview/", serveResized(photoDir, cacheDir, thumbWidthLarge))
 
 			// Gallery page at the obscure path.
 			mux.HandleFunc(galleryPath, func(w http.ResponseWriter, r *http.Request) {
@@ -288,6 +287,7 @@ func main() {
 				}
 				data := galleryData{
 					Photos:  photos,
+					Prefix:  prefix,
 					Count:   len(photos),
 					Updated: time.Now().Format(time.RFC1123),
 				}

@@ -13,6 +13,8 @@
 #   --wifi <ssid> <password>      Pre-configure a WiFi network (repeatable).
 #                                 Written as a NetworkManager connection file.
 #                                 WARNING: password is stored as plain text in the image.
+#   --env <file>                  Custom env file to place on the boot partition as gophotobooth.env.
+#                                 Defaults to env.sample from the package tarball (or repo).
 #   --keep-image                  Keep the downloaded .img.xz in /tmp after flashing.
 #
 # The script will:
@@ -35,6 +37,7 @@ ROOT_PART_SIZE="32GiB"
 
 DEVICE=""
 PACKAGE=""
+ENV_FILE=""
 KEEP_IMAGE=false
 HOSTNAME_VAL="fotobox"
 USER_NAME="pi"
@@ -65,6 +68,11 @@ while [[ $# -gt 0 ]]; do
             WIFI_SSIDS+=("$2")
             WIFI_PASSWORDS+=("$3")
             shift 3
+            ;;
+        --env)
+            [[ $# -ge 2 ]] || { echo "ERROR: --env requires an argument" >&2; exit 1; }
+            ENV_FILE="$2"
+            shift 2
             ;;
         --keep-image)
             KEEP_IMAGE=true
@@ -125,6 +133,7 @@ trap cleanup EXIT INT TERM
 [[ -n "$DEVICE" ]] || error "Usage: $0 <device> [--package <tarball>] [--keep-image]"
 [[ -b "$DEVICE" ]] || error "$DEVICE is not a block device"
 [[ -n "$PACKAGE" && ! -f "$PACKAGE" ]] && error "Package not found: $PACKAGE"
+[[ -n "$ENV_FILE" && ! -f "$ENV_FILE" ]] && error "Env file not found: $ENV_FILE"
 
 for tool in curl xzcat dd mount partprobe parted e2fsck resize2fs mkfs.exfat openssl; do
     command -v "$tool" &>/dev/null || error "Required tool not found: $tool (install the package that provides it)"
@@ -294,9 +303,20 @@ else
     echo 'framebuffer_depth=32' | sudo tee -a "$MOUNT_BOOT/config.txt" > /dev/null
 fi
 
-info "Copying install.sh to boot partition..."
+info "Copying install.sh and env to boot partition..."
 sudo cp "$REPO_ROOT/scripts/install.sh" "$MOUNT_BOOT/install.sh"
 sudo chmod +x "$MOUNT_BOOT/install.sh"
+if [[ -n "$ENV_FILE" ]]; then
+    info "Using custom env file: $ENV_FILE"
+    sudo cp "$ENV_FILE" "$MOUNT_BOOT/gophotobooth.env"
+elif [[ -n "$PACKAGE" ]]; then
+    info "Extracting env.sample from package tarball..."
+    tar -xzf "$PACKAGE" -O ./env.sample 2>/dev/null | sudo tee "$MOUNT_BOOT/gophotobooth.env" > /dev/null \
+        || { info "env.sample not found in tarball, falling back to repo copy"; sudo cp "$REPO_ROOT/env.sample" "$MOUNT_BOOT/gophotobooth.env"; }
+else
+    sudo cp "$REPO_ROOT/env.sample" "$MOUNT_BOOT/gophotobooth.env"
+fi
+sudo chmod 644 "$MOUNT_BOOT/gophotobooth.env"
 
 if [[ -n "$PACKAGE" ]]; then
     info "Writing firstrun.sh (extracts package then runs install.sh)..."
@@ -307,16 +327,20 @@ mkdir -p /root/gophotobooth
 tar -xzf /root/gophotobooth.tar.gz -C /root/gophotobooth --strip-components=1
 rm -f /root/gophotobooth.tar.gz
 cp /boot/firmware/install.sh /root/gophotobooth/scripts/install.sh
+mkdir -p /etc/gophotobooth
+cp /boot/firmware/gophotobooth.env /etc/gophotobooth/env
 bash /root/gophotobooth/scripts/install.sh --hostname ${HOSTNAME_VAL}
-rm -f /boot/firmware/firstrun.sh /boot/firmware/install.sh
+rm -f /boot/firmware/firstrun.sh /boot/firmware/install.sh /boot/firmware/gophotobooth.env
 FIRSTRUN
 else
     info "Writing firstrun.sh (calls install.sh directly)..."
     sudo tee "$MOUNT_BOOT/firstrun.sh" > /dev/null <<FIRSTRUN
 #!/usr/bin/env bash
 set -euo pipefail
+mkdir -p /etc/gophotobooth
+cp /boot/firmware/gophotobooth.env /etc/gophotobooth/env
 bash /boot/firmware/install.sh --hostname ${HOSTNAME_VAL}
-rm -f /boot/firmware/firstrun.sh /boot/firmware/install.sh
+rm -f /boot/firmware/firstrun.sh /boot/firmware/install.sh /boot/firmware/gophotobooth.env
 FIRSTRUN
 fi
 
@@ -339,6 +363,9 @@ echo "  Partitions:"
 echo "    1  FAT32   boot (unchanged)"
 echo "    2  ext4    root (resized to $ROOT_PART_SIZE)"
 echo "    3  exFAT   photos (remaining space)"
+echo ""
+echo "  Edit gophotobooth.env on the boot partition before first boot:"
+echo "    GALLERY_BASE_URL, BUZZER_PIN, CLOUDFLARED_TOKEN, PHOTOS_DIR, CACHE_DIR"
 echo ""
 if [[ -n "$PACKAGE" ]]; then
     echo "  First boot: install.sh will run automatically via firstrun.service."
