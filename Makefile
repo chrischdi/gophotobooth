@@ -107,7 +107,9 @@ package:
 		fi \
 	fi
 	@$(MAKE) image TARGET_ARCH=$(PACKAGE_ARCH)
-	@$(MAKE) build-arm64
+	@echo "==> Building ctl for $(PACKAGE_ARCH)"
+	@mkdir -p bin/$(PACKAGE_ARCH)
+	CGO_ENABLED=0 GOARCH=$(PACKAGE_ARCH) GOOS=$(GOOS_LINUX) go build $(GOFLAGS) -o bin/$(PACKAGE_ARCH)/ctl ./cmd/ctl
 	@echo "==> Packaging for $(PACKAGE_ARCH)"
 	@mkdir -p $(DIST_DIR)
 	@stage=$$(mktemp -d); \

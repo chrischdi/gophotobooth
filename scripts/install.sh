@@ -118,7 +118,8 @@ EOF
 enable_network() {
     configure_wifi
     info "Enabling WiFi via NetworkManager…"
-    systemctl enable --now NetworkManager
+    systemctl enable NetworkManager
+    systemctl restart NetworkManager
     nmcli radio wifi on
     nmcli device set wlan0 managed yes
 }
@@ -126,6 +127,19 @@ enable_network() {
 # ---------------------------------------------------------------------------
 # 3. System packages
 # ---------------------------------------------------------------------------
+wait_for_network() {
+    info "Waiting for internet connectivity…"
+    local timeout=60 elapsed=0
+    until curl -fsSL --max-time 5 -o /dev/null https://deb.debian.org 2>/dev/null; do
+        if (( elapsed >= timeout )); then
+            error "No internet connectivity after ${timeout}s — aborting."
+        fi
+        sleep 5
+        (( elapsed += 5 ))
+    done
+    info "Internet connectivity confirmed."
+}
+
 install_packages() {
     info "Updating package lists…"
     apt-get update -qq
@@ -213,6 +227,13 @@ tailscale_up() {
         mkdir -p /var/lib/tailscale
         echo "$state_b64" | base64 -d > /var/lib/tailscale/tailscaled.state
         chmod 600 /var/lib/tailscale/tailscaled.state
+        local log_conf_b64
+        log_conf_b64=$(grep -E '^TAILSCALE_LOG_CONF=.+' /etc/gophotobooth/env 2>/dev/null | cut -d= -f2- || true)
+        if [[ -n "$log_conf_b64" ]]; then
+            info "Restoring Tailscale log config from TAILSCALE_LOG_CONF…"
+            echo "$log_conf_b64" | base64 -d > /var/lib/tailscale/tailscaled.log.conf
+            chmod 600 /var/lib/tailscale/tailscaled.log.conf
+        fi
         systemctl enable --now tailscaled
         return
     fi
@@ -250,6 +271,13 @@ BUZZER_PIN=
 
 # Cloudflare Tunnel token. Leave empty to disable cloudflared.
 CLOUDFLARED_TOKEN=
+
+# Tailscale state files (base64-encoded) to restore a node identity instead of registering a new one.
+# Takes precedence over TAILSCALE_AUTH_KEY. Generate with:
+#   base64 -w0 /var/lib/tailscale/tailscaled.state
+#   base64 -w0 /var/lib/tailscale/tailscaled.log.conf
+TAILSCALE_STATE=
+TAILSCALE_LOG_CONF=
 
 # WiFi network(s) to pre-configure on first boot. Repeat with _2, _3, … for multiple networks.
 # Leave empty to skip (e.g. when using Ethernet).
@@ -530,6 +558,7 @@ enable_services() {
 require_root
 configure_hostname
 enable_network
+wait_for_network
 install_packages
 configure_xorg
 install_tailscale

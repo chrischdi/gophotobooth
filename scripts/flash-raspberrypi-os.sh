@@ -180,7 +180,7 @@ sudo e2fsck -f "$(part "$DEVICE" 2)"
 sudo resize2fs "$(part "$DEVICE" 2)"
 
 info "Creating partition 3 (exFAT, remaining disk space)..."
-sudo parted -s "$DEVICE" mkpart primary "$ROOT_PART_SIZE" 100%
+sudo parted -s "$DEVICE" mkpart primary ntfs "$ROOT_PART_SIZE" 100%
 sudo partprobe "$DEVICE"
 sleep 1
 
@@ -273,6 +273,18 @@ else
     sudo cp "$REPO_ROOT/env.sample" "$MOUNT_BOOT/gophotobooth.env"
 fi
 sudo chmod 644 "$MOUNT_BOOT/gophotobooth.env"
+
+CMDLINE_VIDEO=$(grep -E '^CMDLINE_VIDEO=.+' "$MOUNT_BOOT/gophotobooth.env" 2>/dev/null | cut -d= -f2- || true)
+if [[ -n "$CMDLINE_VIDEO" ]]; then
+    info "Setting video rotation ${CMDLINE_VIDEO}° in cmdline.txt (Pi 5 KMS)..."
+    if grep -q "video=" "$MOUNT_BOOT/cmdline.txt" 2>/dev/null; then
+        info "video=.* already set — skipping."
+    else
+        sudo sed -i "s/$/ video=${CMDLINE_VIDEO}/" "$MOUNT_BOOT/cmdline.txt"
+    fi
+else
+    info "CMDLINE_VIDEO not set — skipping cmdline.txt rotation."
+fi
 
 if [[ -n "$PACKAGE" ]]; then
     info "Writing firstrun.sh (extracts package then runs install.sh)..."
