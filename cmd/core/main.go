@@ -64,29 +64,21 @@ func (s *coreServer) runWorkflow() error {
 	ctx := context.Background()
 
 	for _, count := range []int32{3, 2, 1} {
-		slog.Info("[ui.ShowCountdown] before", "count", count)
 		if _, err := s.ui.ShowCountdown(ctx, &pbui.CountdownRequest{Count: count}); err != nil {
 			return fmt.Errorf("ShowCountdown(%d): %w", count, err)
 		}
-		slog.Info("[ui.ShowCountdown] after", "count", count)
 		s.sleepFn(time.Second)
-		slog.Info("[ui.ShowCountdown] after sleep", "count", count)
 	}
 
-	slog.Info("[ui.ShowSmile] before")
 	if _, err := s.ui.ShowSmile(ctx, &emptypb.Empty{}); err != nil {
 		return fmt.Errorf("ShowSmile: %w", err)
 	}
-	slog.Info("[ui.ShowSmile] after")
 	// Allow the display pipeline (Fyne render tick + panel latency) to catch
 	// up before the shutter fires. DoAndWait only guarantees SetContent ran on
 	// the main thread; the pixel reaching the screen takes an additional frame
 	// plus any display-controller buffering (~100–150 ms on typical hardware).
-	s.sleepFn(200 * time.Millisecond)
 
-	slog.Info("[ui.TakePhoto] before")
 	resp, err := s.dslr.TakePhoto(ctx, &emptypb.Empty{})
-	slog.Info("[ui.TakePhoto] after")
 	if err != nil {
 		return fmt.Errorf("TakePhoto: %w", err)
 	}
@@ -200,8 +192,8 @@ func main() {
 	cmd.Flags().StringVar(&dslrAddr, "dslr-address", constants.DSLRAddress, "DSLR service gRPC address")
 	cmd.Flags().StringVar(&photoDir, "directory", "/photos", "directory to store photos")
 	cmd.Flags().StringVar(&galleryBaseURL, "gallery-base-url", "", "base URL of the gallery service (e.g. http://photobooth.local:8080); enables QR code on the UI when set")
-	cmd.Flags().IntVar(&postCaptureSecs, "post-capture-seconds", 3, "seconds to block new workflows after a capture")
-	cmd.Flags().IntVar(&autoTriggerMinutes, "auto-trigger-minutes", 15, "minutes of inactivity before auto-triggering a workflow")
+	cmd.Flags().IntVar(&postCaptureSecs, "post-capture-seconds", 1, "seconds to block new workflows after a capture")
+	cmd.Flags().IntVar(&autoTriggerMinutes, "auto-trigger-minutes", 29, "minutes of inactivity before auto-triggering a workflow")
 
 	if err := cmd.Execute(); err != nil {
 		os.Exit(1)

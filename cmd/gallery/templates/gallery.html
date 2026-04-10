@@ -48,7 +48,7 @@ h1 { text-align: center; padding: 1rem; }
 </style>
 </head>
 <body>
-<h1>Photo Gallery</h1>
+<h1>Fotobox Galerie</h1>
 <div class="grid">
 {{range $i, $p := .Photos}}
 <img src="/g/{{$.Prefix}}/thumb/{{$p.Name}}" loading="lazy" alt="{{$p.Name}}" data-index="{{$i}}">
