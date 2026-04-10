@@ -54,6 +54,7 @@ type uiServer struct {
 	errorLayer       fyne.CanvasObject
 	mainStack        fyne.CanvasObject // needed to force repaint before first ShowImage
 	firstImageShown  bool
+	qrActive         bool // true when the current photo has a QR code
 }
 
 func bigRedText(s string, textSize float32) fyne.CanvasObject {
@@ -111,6 +112,9 @@ func (s *uiServer) ShowCountdown(_ context.Context, req *pb.CountdownRequest) (*
 		s.hideAllOverlays()
 		s.dimLayer.Show()
 		s.overlayCountdown[count].Show()
+		if s.qrActive {
+			s.qrLayer.Show()
+		}
 		if !s.firstImageShown {
 			s.mainStack.Refresh()
 		}
@@ -124,6 +128,9 @@ func (s *uiServer) ShowSmile(_ context.Context, _ *emptypb.Empty) (*emptypb.Empt
 		s.hideAllOverlays()
 		s.dimLayer.Show()
 		s.overlaySmile.Show()
+		if s.qrActive {
+			s.qrLayer.Show()
+		}
 		if !s.firstImageShown {
 			s.mainStack.Refresh()
 		}
@@ -165,6 +172,7 @@ func (s *uiServer) ShowImage(_ context.Context, req *pb.ShowImageRequest) (*empt
 		s.photoCanvas.Image = img
 		s.photoCanvas.Refresh()
 		s.firstImageShown = true
+		s.qrActive = qrImg != nil
 		if qrImg != nil {
 			s.qrImage.Image = qrImg
 			s.qrImage.Refresh()

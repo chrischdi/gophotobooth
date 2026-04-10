@@ -234,7 +234,8 @@ tailscale_up() {
             echo "$log_conf_b64" | base64 -d > /var/lib/tailscale/tailscaled.log.conf
             chmod 600 /var/lib/tailscale/tailscaled.log.conf
         fi
-        systemctl enable --now tailscaled
+        systemctl enable tailscaled
+        systemctl restart tailscaled
         return
     fi
     local key
