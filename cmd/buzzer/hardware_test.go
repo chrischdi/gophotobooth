@@ -7,8 +7,6 @@ import (
 	"os"
 	"testing"
 	"time"
-
-	"github.com/chrischdi/gophotobooth/pkg/buzzer/gpio"
 )
 
 // TestHardware_GpioBuzzerWait requires a real Raspberry Pi with a physical
@@ -23,10 +21,11 @@ func TestHardware_GpioBuzzerWait(t *testing.T) {
 		pin = "GPIO17"
 	}
 
-	b, err := gpio.New(pin)
+	b, err := newGPIOButton(pin)
 	if err != nil {
 		t.Skipf("failed to initialise GPIO pin %q (no hardware?): %v", pin, err)
 	}
+	defer b.line.Close() //nolint:errcheck
 
 	fmt.Fprintf(os.Stderr, "\n>>> MANUAL ACTION REQUIRED: press the button on pin %s within 30s <<<\n", pin)
 

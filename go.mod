@@ -9,11 +9,10 @@ require (
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
+	github.com/warthog618/go-gpiocdev v0.9.1
 	golang.org/x/image v0.24.0
 	google.golang.org/grpc v1.79.3
 	google.golang.org/protobuf v1.36.11
-	periph.io/x/conn/v3 v3.7.2
-	periph.io/x/host/v3 v3.8.5
 )
 
 require (
