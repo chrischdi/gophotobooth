@@ -36,17 +36,24 @@ var welcomeJPEG []byte
 
 // uiServer handles gRPC calls from Core and updates the Fyne window.
 // All window mutations are dispatched to the Fyne main thread via fyne.DoAndWait.
+//
+// All layers are pre-built at startup and stored in mainStack. State transitions
+// only toggle visibility and refresh in-place — SetContent is never called after init.
 type uiServer struct {
 	pb.UnimplementedUIServer
-	window    fyne.Window
-	lastPhoto fyne.CanvasObject // photo only, used as countdown background
-	lastQR    fyne.CanvasObject // QR overlay only (nil when no QR), placed above the dim layer
-}
+	window fyne.Window
 
-func (s *uiServer) setContent(obj fyne.CanvasObject) {
-	fyne.DoAndWait(func() {
-		s.window.SetContent(obj)
-	})
+	// pre-built layers (back to front in mainStack)
+	photoCanvas      *canvas.Image        // bottom: current photo (or welcome image)
+	dimLayer         *canvas.Rectangle    // semi-transparent dim during countdown/smile
+	overlayCountdown [4]fyne.CanvasObject // indices 1, 2, 3 are valid
+	overlaySmile     fyne.CanvasObject
+	qrImage          *canvas.Image
+	qrLayer          fyne.CanvasObject
+	errorLabel       *widget.Label
+	errorLayer       fyne.CanvasObject
+	mainStack        fyne.CanvasObject // needed to force repaint before first ShowImage
+	firstImageShown  bool
 }
 
 func bigRedText(s string, textSize float32) fyne.CanvasObject {
@@ -57,56 +64,70 @@ func bigRedText(s string, textSize float32) fyne.CanvasObject {
 	return container.NewCenter(t)
 }
 
+func buildCountdownOverlay(count int) fyne.CanvasObject {
+	obj := container.NewCenter(container.NewVBox(
+		container.NewCenter(bigRedText(fmt.Sprintf("%d", count), 250)),
+		container.NewCenter(bigRedText("Blick nach unten!", 100)),
+		bigRedText("▼", 150),
+	))
+	obj.Hide()
+	return obj
+}
+
+func buildSmileOverlay() fyne.CanvasObject {
+	obj := container.NewCenter(container.NewVBox(
+		container.NewCenter(
+			bigRedText("", 250),
+			container.NewVBox(
+				bigRedText("", 90),
+				bigRedText("⌛", 150),
+			),
+			bigRedText("", 250),
+		),
+		container.NewCenter(bigRedText("Blick nach unten!", 100)),
+		container.NewCenter(bigRedText("▼", 150)),
+	))
+	obj.Hide()
+	return obj
+}
+
+func (s *uiServer) hideAllOverlays() {
+	s.dimLayer.Hide()
+	for i := 1; i <= 3; i++ {
+		s.overlayCountdown[i].Hide()
+	}
+	s.overlaySmile.Hide()
+	s.qrLayer.Hide()
+	s.errorLayer.Hide()
+}
+
 func (s *uiServer) ShowCountdown(_ context.Context, req *pb.CountdownRequest) (*emptypb.Empty, error) {
-	slog.Info("UI: ShowCountdown", "count", req.Count)
-
-	t := canvas.NewText(fmt.Sprintf("%d", req.Count), color.RGBA{R: 255, A: 255})
-	t.TextSize = 250
-	t.TextStyle = fyne.TextStyle{Bold: true}
-	t.Alignment = fyne.TextAlignCenter
-
-	dim := canvas.NewRectangle(color.RGBA{A: 125})
-
-	layers := []fyne.CanvasObject{
-		s.lastPhoto,
-		dim,
-		container.NewCenter(container.NewVBox(
-			container.NewCenter(bigRedText(fmt.Sprintf("%d", req.Count), 250)),
-			container.NewCenter(bigRedText("Blick nach unten!", 100)),
-			bigRedText("▼", 150),
-		)),
+	count := int(req.Count)
+	if count < 1 || count > 3 {
+		return nil, fmt.Errorf("invalid countdown value %d: must be 1, 2, or 3", count)
 	}
-	if s.lastQR != nil {
-		layers = append(layers, s.lastQR)
-	}
-	s.setContent(container.NewStack(layers...))
+	slog.Info("UI: ShowCountdown", "count", count)
+	fyne.DoAndWait(func() {
+		s.hideAllOverlays()
+		s.dimLayer.Show()
+		s.overlayCountdown[count].Show()
+		if !s.firstImageShown {
+			s.mainStack.Refresh()
+		}
+	})
 	return &emptypb.Empty{}, nil
 }
 
 func (s *uiServer) ShowSmile(_ context.Context, _ *emptypb.Empty) (*emptypb.Empty, error) {
 	slog.Info("UI: ShowSmile")
-
-	dim := canvas.NewRectangle(color.RGBA{A: 125})
-	layers := []fyne.CanvasObject{
-		s.lastPhoto,
-		dim,
-		container.NewCenter(container.NewVBox(
-			container.NewCenter(
-				bigRedText("", 250),
-				container.NewVBox(
-					bigRedText("", 90),
-					bigRedText("⌛", 150),
-				),
-				bigRedText("", 250),
-			),
-			container.NewCenter(bigRedText("Blick nach unten!", 100)),
-			container.NewCenter(bigRedText("▼", 150)),
-		)),
-	}
-	if s.lastQR != nil {
-		layers = append(layers, s.lastQR)
-	}
-	s.setContent(container.NewStack(layers...))
+	fyne.DoAndWait(func() {
+		s.hideAllOverlays()
+		s.dimLayer.Show()
+		s.overlaySmile.Show()
+		if !s.firstImageShown {
+			s.mainStack.Refresh()
+		}
+	})
 	return &emptypb.Empty{}, nil
 }
 
@@ -115,56 +136,51 @@ func (s *uiServer) ShowImage(_ context.Context, req *pb.ShowImageRequest) (*empt
 	if err != nil {
 		return nil, fmt.Errorf("decode image: %w", err)
 	}
-	fyneImg := canvas.NewImageFromImage(img)
-	fyneImg.FillMode = canvas.ImageFillContain
-	fyneImg.ScaleMode = canvas.ImageScaleSmooth
 	slog.Info("UI: ShowImage", "bytes", len(req.ImageBytes), "photo_url", req.PhotoUrl)
 
-	s.lastPhoto = fyneImg
-	s.lastQR = nil
-
+	// Generate QR code outside the UI thread.
+	var qrImg image.Image
 	if req.PhotoUrl != "" {
 		qrc, err := qrcode.New(req.PhotoUrl, qrcode.Medium)
 		if err != nil {
 			slog.Warn("UI: failed to generate QR code", "err", err)
-			qrc = nil
-		}
-		var qrPNG []byte
-		if qrc != nil {
-			qrc.DisableBorder = true
-			qrPNG, err = qrc.PNG(256)
-		}
-		if err != nil {
-			slog.Warn("UI: failed to generate QR code", "err", err)
 		} else {
-			qrImg, _, err := image.Decode(bytes.NewReader(qrPNG))
+			qrc.DisableBorder = true
+			qrPNG, err := qrc.PNG(256)
 			if err != nil {
-				slog.Warn("UI: failed to decode QR PNG", "err", err)
+				slog.Warn("UI: failed to encode QR PNG", "err", err)
 			} else {
-				qrImg = addWhiteBorder(qrImg, 5)
-				qr := canvas.NewImageFromImage(qrImg)
-				qr.FillMode = canvas.ImageFillOriginal
-				qr.SetMinSize(fyne.NewSize(200, 200))
-				s.lastQR = container.NewBorder(nil,
-					container.NewHBox(layout.NewSpacer(), qr),
-					nil, nil)
+				decoded, _, err := image.Decode(bytes.NewReader(qrPNG))
+				if err != nil {
+					slog.Warn("UI: failed to decode QR PNG", "err", err)
+				} else {
+					qrImg = addWhiteBorder(decoded, 5)
+				}
 			}
 		}
 	}
 
-	var content fyne.CanvasObject = fyneImg
-	if s.lastQR != nil {
-		content = container.NewStack(fyneImg, s.lastQR)
-	}
-	s.setContent(content)
+	fyne.DoAndWait(func() {
+		s.hideAllOverlays()
+		s.photoCanvas.Image = img
+		s.photoCanvas.Refresh()
+		s.firstImageShown = true
+		if qrImg != nil {
+			s.qrImage.Image = qrImg
+			s.qrImage.Refresh()
+			s.qrLayer.Show()
+		}
+	})
 	return &emptypb.Empty{}, nil
 }
 
 func (s *uiServer) ShowError(_ context.Context, req *pb.ShowErrorRequest) (*emptypb.Empty, error) {
 	slog.Info("UI: ShowError", "message", req.Message)
-	s.setContent(container.NewCenter(
-		widget.NewLabelWithStyle("Error: "+req.Message, fyne.TextAlignCenter, fyne.TextStyle{}),
-	))
+	fyne.DoAndWait(func() {
+		s.hideAllOverlays()
+		s.errorLabel.SetText("Error: " + req.Message)
+		s.errorLayer.Show()
+	})
 	return &emptypb.Empty{}, nil
 }
 
@@ -182,12 +198,61 @@ func main() {
 			win.SetMaster()
 			win.SetFullScreen(true)
 
-			srv := &uiServer{window: win, lastPhoto: canvas.NewRectangle(colorBlack())}
+			// Build welcome image as initial photo layer.
 			welcomeImg, _, _ := image.Decode(bytes.NewReader(welcomeJPEG))
-			fyneWelcome := canvas.NewImageFromImage(welcomeImg)
-			fyneWelcome.FillMode = canvas.ImageFillContain
-			fyneWelcome.ScaleMode = canvas.ImageScaleSmooth
-			win.SetContent(fyneWelcome)
+			photoCanvas := canvas.NewImageFromImage(welcomeImg)
+			photoCanvas.FillMode = canvas.ImageFillContain
+			photoCanvas.ScaleMode = canvas.ImageScaleSmooth
+
+			dimLayer := canvas.NewRectangle(color.RGBA{A: 125})
+			dimLayer.Hide()
+
+			// Pre-build countdown overlays.
+			var overlayCountdown [4]fyne.CanvasObject
+			for i := 1; i <= 3; i++ {
+				overlayCountdown[i] = buildCountdownOverlay(i)
+			}
+
+			overlaySmile := buildSmileOverlay()
+
+			// Pre-build QR layer with a placeholder image (updated on ShowImage).
+			qrImage := canvas.NewImageFromImage(image.NewNRGBA(image.Rect(0, 0, 256, 256)))
+			qrImage.FillMode = canvas.ImageFillOriginal
+			qrImage.SetMinSize(fyne.NewSize(200, 200))
+			qrLayer := container.NewBorder(nil,
+				container.NewHBox(layout.NewSpacer(), qrImage),
+				nil, nil)
+			qrLayer.Hide()
+
+			// Pre-build error layer.
+			errorLabel := widget.NewLabelWithStyle("", fyne.TextAlignCenter, fyne.TextStyle{})
+			errorLayer := container.NewCenter(errorLabel)
+			errorLayer.Hide()
+
+			mainStack := container.NewStack(
+				photoCanvas,
+				dimLayer,
+				overlayCountdown[1],
+				overlayCountdown[2],
+				overlayCountdown[3],
+				overlaySmile,
+				qrLayer,
+				errorLayer,
+			)
+			win.SetContent(mainStack)
+
+			srv := &uiServer{
+				window:           win,
+				photoCanvas:      photoCanvas,
+				dimLayer:         dimLayer,
+				overlayCountdown: overlayCountdown,
+				overlaySmile:     overlaySmile,
+				qrImage:          qrImage,
+				qrLayer:          qrLayer,
+				errorLabel:       errorLabel,
+				errorLayer:       errorLayer,
+				mainStack:        mainStack,
+			}
 
 			lis, err := net.Listen("tcp", listenAddr)
 			if err != nil {
