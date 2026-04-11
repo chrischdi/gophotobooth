@@ -76,6 +76,24 @@ func TestOldestPhotoName_NonexistentDir(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestGalleryURL_EmptyBase(t *testing.T) {
+	got := GalleryURL("", "oldest.jpg")
+	assert.Empty(t, got)
+}
+
+func TestGalleryURL_EmptyOldest(t *testing.T) {
+	got := GalleryURL("http://example.com", "")
+	assert.Empty(t, got)
+}
+
+func TestGalleryURL_Full(t *testing.T) {
+	base := "http://example.com"
+	oldest := "2026-01-01.jpg"
+	got := GalleryURL(base, oldest)
+	want := base + "/g/" + HashPrefix(oldest) + "/"
+	assert.Equal(t, want, got)
+}
+
 func TestDirectURL_EmptyBase(t *testing.T) {
 	got := DirectURL("", "oldest.jpg", "photo.jpg")
 	assert.Empty(t, got)

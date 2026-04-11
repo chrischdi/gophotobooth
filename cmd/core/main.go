@@ -122,7 +122,7 @@ func (s *coreServer) runWorkflow() error {
 	oldest, _ := galleryurl.OldestPhotoName(s.photoDir)
 	photoURL := ""
 	if hasIPv4Address(s.wifiIface) {
-		photoURL = galleryurl.DirectURL(s.galleryBaseURL, oldest, resp.Filename)
+		photoURL = galleryurl.GalleryURL(s.galleryBaseURL, oldest)
 	} else {
 		slog.Info("wifi not connected — skipping QR code", "iface", s.wifiIface)
 	}

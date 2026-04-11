@@ -180,7 +180,7 @@ func TestRunWorkflow_PhotoURL(t *testing.T) {
 	require.Len(t, uiSrv.imageReqs, 1)
 	photoURL := uiSrv.imageReqs[0].PhotoUrl
 	assert.Contains(t, photoURL, "/g/")
-	assert.Contains(t, photoURL, "#2026-03-22T12-00-00.jpg")
+	assert.NotContains(t, photoURL, "#")
 }
 
 func TestRunWorkflow_DSLRError(t *testing.T) {

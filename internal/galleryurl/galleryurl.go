@@ -41,6 +41,18 @@ func OldestPhotoName(dir string) (string, error) {
 	return oldest, nil
 }
 
+// GalleryURL returns the URL of the gallery root, or an empty string if
+// baseURL or oldestName is empty.
+//
+//	baseURL     e.g. "http://photobooth.local:8080"
+//	oldestName  filename of the oldest photo (used to derive the gallery path)
+func GalleryURL(baseURL, oldestName string) string {
+	if baseURL == "" || oldestName == "" {
+		return ""
+	}
+	return baseURL + "/g/" + HashPrefix(oldestName) + "/"
+}
+
 // DirectURL returns the full deep-link URL for a photo, or an empty string if
 // baseURL or oldestName is empty.
 //
@@ -51,5 +63,5 @@ func DirectURL(baseURL, oldestName, photoName string) string {
 	if baseURL == "" || oldestName == "" {
 		return ""
 	}
-	return baseURL + "/g/" + HashPrefix(oldestName) + "/#" + photoName
+	return GalleryURL(baseURL, oldestName) + "#" + photoName
 }
