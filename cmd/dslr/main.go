@@ -18,6 +18,7 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/chrischdi/gophotobooth/internal/constants"
+	"github.com/chrischdi/gophotobooth/internal/pprofserver"
 	"github.com/chrischdi/gophotobooth/pkg/camera/gphoto2"
 	pb "github.com/chrischdi/gophotobooth/proto/dslr"
 )
@@ -79,12 +80,16 @@ func (s *server) TakePhoto(_ context.Context, _ *emptypb.Empty) (*pb.TakePhotoRe
 }
 
 func main() {
-	var listenAddr string
+	var (
+		listenAddr string
+		pprofAddr  string
+	)
 
 	cmd := &cobra.Command{
 		Use:   "dslr",
 		Short: "DSLR gRPC camera bridge (gphoto2)",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			pprofserver.Start(pprofAddr)
 			cam, err := gphoto2.New()
 			if err != nil {
 				// TODO use human readable error
@@ -128,6 +133,7 @@ func main() {
 	}
 
 	cmd.Flags().StringVar(&listenAddr, "listen", constants.DSLRAddress, "gRPC listen address")
+	cmd.Flags().StringVar(&pprofAddr, "pprof-addr", constants.PprofDSLR, "pprof listen address (empty to disable)")
 
 	if err := cmd.Execute(); err != nil {
 		os.Exit(1)

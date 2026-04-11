@@ -219,6 +219,17 @@ configure_ssh_key() {
     done
 }
 
+harden_ssh() {
+    info "Disabling SSH password authentication…"
+    local cfg=/etc/ssh/sshd_config.d/99-gophotobooth.conf
+    cat > "$cfg" <<'EOF'
+PasswordAuthentication no
+ChallengeResponseAuthentication no
+EOF
+    chmod 644 "$cfg"
+    systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true
+}
+
 tailscale_up() {
     local state_b64
     state_b64=$(grep -E '^TAILSCALE_STATE=.+' /etc/gophotobooth/env 2>/dev/null | cut -d= -f2- || true)
@@ -565,6 +576,7 @@ configure_xorg
 install_tailscale
 write_env_file
 configure_ssh_key
+harden_ssh
 tailscale_up
 install_ctl
 load_images

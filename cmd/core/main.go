@@ -22,6 +22,7 @@ import (
 
 	"github.com/chrischdi/gophotobooth/internal/constants"
 	"github.com/chrischdi/gophotobooth/internal/galleryurl"
+	"github.com/chrischdi/gophotobooth/internal/pprofserver"
 	pbcore "github.com/chrischdi/gophotobooth/proto/core"
 	pbdslr "github.com/chrischdi/gophotobooth/proto/dslr"
 	pbui "github.com/chrischdi/gophotobooth/proto/ui"
@@ -140,12 +141,14 @@ func main() {
 		galleryBaseURL     string
 		postCaptureSecs    int
 		autoTriggerMinutes int
+		pprofAddr          string
 	)
 
 	cmd := &cobra.Command{
 		Use:   "core",
 		Short: "Photo booth orchestrator gRPC server",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			pprofserver.Start(pprofAddr)
 			if err := os.MkdirAll(photoDir, 0755); err != nil {
 				return fmt.Errorf("create photo dir %s: %w", photoDir, err)
 			}
@@ -194,6 +197,7 @@ func main() {
 	cmd.Flags().StringVar(&galleryBaseURL, "gallery-base-url", "", "base URL of the gallery service (e.g. http://photobooth.local:8080); enables QR code on the UI when set")
 	cmd.Flags().IntVar(&postCaptureSecs, "post-capture-seconds", 1, "seconds to block new workflows after a capture")
 	cmd.Flags().IntVar(&autoTriggerMinutes, "auto-trigger-minutes", 29, "minutes of inactivity before auto-triggering a workflow")
+	cmd.Flags().StringVar(&pprofAddr, "pprof-addr", constants.PprofCore, "pprof listen address (empty to disable)")
 
 	if err := cmd.Execute(); err != nil {
 		os.Exit(1)

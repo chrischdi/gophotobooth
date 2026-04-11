@@ -28,6 +28,7 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/chrischdi/gophotobooth/internal/constants"
+	"github.com/chrischdi/gophotobooth/internal/pprofserver"
 	pb "github.com/chrischdi/gophotobooth/proto/ui"
 )
 
@@ -193,12 +194,16 @@ func (s *uiServer) ShowError(_ context.Context, req *pb.ShowErrorRequest) (*empt
 }
 
 func main() {
-	var listenAddr string
+	var (
+		listenAddr string
+		pprofAddr  string
+	)
 
 	cmd := &cobra.Command{
 		Use:   "ui",
 		Short: "Photo booth display gRPC server",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			pprofserver.Start(pprofAddr)
 			a := app.New()
 			a.Settings().SetTheme(&darkTheme{})
 
@@ -288,6 +293,7 @@ func main() {
 	}
 
 	cmd.Flags().StringVar(&listenAddr, "listen", constants.UIAddress, "gRPC listen address")
+	cmd.Flags().StringVar(&pprofAddr, "pprof-addr", constants.PprofUI, "pprof listen address (empty to disable)")
 
 	if err := cmd.Execute(); err != nil {
 		os.Exit(1)

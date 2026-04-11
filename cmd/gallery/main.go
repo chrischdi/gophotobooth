@@ -18,7 +18,9 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/cobra"
 
+	"github.com/chrischdi/gophotobooth/internal/constants"
 	"github.com/chrischdi/gophotobooth/internal/galleryurl"
+	"github.com/chrischdi/gophotobooth/internal/pprofserver"
 )
 
 //go:embed templates/gallery.html
@@ -240,12 +242,14 @@ func main() {
 		listenAddr string
 		photoDir   string
 		cacheDir   string
+		pprofAddr  string
 	)
 
 	cmd := &cobra.Command{
 		Use:   "gallery",
 		Short: "HTTP photo gallery server",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			pprofserver.Start(pprofAddr)
 			tpl, err := template.New("gallery").Parse(galleryTpl)
 			if err != nil {
 				return fmt.Errorf("parse template: %w", err)
@@ -310,6 +314,7 @@ func main() {
 	cmd.Flags().StringVar(&listenAddr, "listen", "0.0.0.0:8080", "HTTP listen address")
 	cmd.Flags().StringVar(&photoDir, "directory", "/photos", "directory containing photos")
 	cmd.Flags().StringVar(&cacheDir, "cache-dir", "/cache", "directory for generated thumbnails and previews")
+	cmd.Flags().StringVar(&pprofAddr, "pprof-addr", constants.PprofGallery, "pprof listen address (empty to disable)")
 
 	if err := cmd.Execute(); err != nil {
 		os.Exit(1)
