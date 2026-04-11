@@ -20,6 +20,7 @@ import (
 
 	"github.com/chrischdi/gophotobooth/internal/constants"
 	"github.com/chrischdi/gophotobooth/internal/galleryurl"
+	"github.com/chrischdi/gophotobooth/internal/logsetup"
 	"github.com/chrischdi/gophotobooth/internal/pprofserver"
 )
 
@@ -243,12 +244,16 @@ func main() {
 		photoDir   string
 		cacheDir   string
 		pprofAddr  string
+		logLevel   string
 	)
 
 	cmd := &cobra.Command{
 		Use:   "gallery",
 		Short: "HTTP photo gallery server",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := logsetup.Init(logLevel); err != nil {
+				return err
+			}
 			pprofserver.Start(pprofAddr)
 			tpl, err := template.New("gallery").Parse(galleryTpl)
 			if err != nil {
@@ -315,6 +320,7 @@ func main() {
 	cmd.Flags().StringVar(&photoDir, "directory", "/photos", "directory containing photos")
 	cmd.Flags().StringVar(&cacheDir, "cache-dir", "/cache", "directory for generated thumbnails and previews")
 	cmd.Flags().StringVar(&pprofAddr, "pprof-addr", constants.PprofGallery, "pprof listen address (empty to disable)")
+	cmd.Flags().StringVar(&logLevel, "log-level", "warn", "log level (debug, info, warn, error)")
 
 	if err := cmd.Execute(); err != nil {
 		os.Exit(1)

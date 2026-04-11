@@ -28,6 +28,7 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/chrischdi/gophotobooth/internal/constants"
+	"github.com/chrischdi/gophotobooth/internal/logsetup"
 	"github.com/chrischdi/gophotobooth/internal/pprofserver"
 	pb "github.com/chrischdi/gophotobooth/proto/ui"
 )
@@ -145,7 +146,6 @@ func (s *uiServer) ShowImage(_ context.Context, req *pb.ShowImageRequest) (*empt
 		return nil, fmt.Errorf("decode image: %w", err)
 	}
 	slog.Info("UI: ShowImage", "bytes", len(req.ImageBytes), "photo_url", req.PhotoUrl)
-
 	// Generate QR code outside the UI thread.
 	var qrImg image.Image
 	if req.PhotoUrl != "" {
@@ -197,12 +197,16 @@ func main() {
 	var (
 		listenAddr string
 		pprofAddr  string
+		logLevel   string
 	)
 
 	cmd := &cobra.Command{
 		Use:   "ui",
 		Short: "Photo booth display gRPC server",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := logsetup.Init(logLevel); err != nil {
+				return err
+			}
 			pprofserver.Start(pprofAddr)
 			a := app.New()
 			a.Settings().SetTheme(&darkTheme{})
@@ -294,6 +298,7 @@ func main() {
 
 	cmd.Flags().StringVar(&listenAddr, "listen", constants.UIAddress, "gRPC listen address")
 	cmd.Flags().StringVar(&pprofAddr, "pprof-addr", constants.PprofUI, "pprof listen address (empty to disable)")
+	cmd.Flags().StringVar(&logLevel, "log-level", "warn", "log level (debug, info, warn, error)")
 
 	if err := cmd.Execute(); err != nil {
 		os.Exit(1)

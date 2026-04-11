@@ -18,6 +18,7 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/chrischdi/gophotobooth/internal/constants"
+	"github.com/chrischdi/gophotobooth/internal/logsetup"
 	"github.com/chrischdi/gophotobooth/internal/pprofserver"
 	"github.com/chrischdi/gophotobooth/pkg/camera/gphoto2"
 	pb "github.com/chrischdi/gophotobooth/proto/dslr"
@@ -83,12 +84,16 @@ func main() {
 	var (
 		listenAddr string
 		pprofAddr  string
+		logLevel   string
 	)
 
 	cmd := &cobra.Command{
 		Use:   "dslr",
 		Short: "DSLR gRPC camera bridge (gphoto2)",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := logsetup.Init(logLevel); err != nil {
+				return err
+			}
 			pprofserver.Start(pprofAddr)
 			cam, err := gphoto2.New()
 			if err != nil {
@@ -134,6 +139,7 @@ func main() {
 
 	cmd.Flags().StringVar(&listenAddr, "listen", constants.DSLRAddress, "gRPC listen address")
 	cmd.Flags().StringVar(&pprofAddr, "pprof-addr", constants.PprofDSLR, "pprof listen address (empty to disable)")
+	cmd.Flags().StringVar(&logLevel, "log-level", "warn", "log level (debug, info, warn, error)")
 
 	if err := cmd.Execute(); err != nil {
 		os.Exit(1)

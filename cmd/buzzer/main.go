@@ -15,6 +15,7 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/chrischdi/gophotobooth/internal/constants"
+	"github.com/chrischdi/gophotobooth/internal/logsetup"
 	"github.com/chrischdi/gophotobooth/internal/pprofserver"
 	pbcore "github.com/chrischdi/gophotobooth/proto/core"
 )
@@ -88,12 +89,16 @@ func main() {
 		coreAddr  string
 		pinName   string
 		pprofAddr string
+		logLevel  string
 	)
 
 	cmd := &cobra.Command{
 		Use:   "buzzer",
 		Short: "GPIO button listener that triggers the photo workflow",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := logsetup.Init(logLevel); err != nil {
+				return err
+			}
 			pprofserver.Start(pprofAddr)
 			b, err := newGPIOButton(pinName)
 			if err != nil {
@@ -115,6 +120,7 @@ func main() {
 	cmd.Flags().StringVar(&coreAddr, "core-address", constants.CoreAddress, "Core service gRPC address")
 	cmd.Flags().StringVar(&pinName, "pin", "GPIO17", "GPIO pin name for the button")
 	cmd.Flags().StringVar(&pprofAddr, "pprof-addr", constants.PprofBuzzer, "pprof listen address (empty to disable)")
+	cmd.Flags().StringVar(&logLevel, "log-level", "warn", "log level (debug, info, warn, error)")
 
 	if err := cmd.Execute(); err != nil {
 		os.Exit(1)

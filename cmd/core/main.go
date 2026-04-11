@@ -22,6 +22,7 @@ import (
 
 	"github.com/chrischdi/gophotobooth/internal/constants"
 	"github.com/chrischdi/gophotobooth/internal/galleryurl"
+	"github.com/chrischdi/gophotobooth/internal/logsetup"
 	"github.com/chrischdi/gophotobooth/internal/pprofserver"
 	pbcore "github.com/chrischdi/gophotobooth/proto/core"
 	pbdslr "github.com/chrischdi/gophotobooth/proto/dslr"
@@ -36,12 +37,36 @@ type coreServer struct {
 
 	photoDir            string
 	galleryBaseURL      string
+	wifiIface           string
 	postCaptureDuration time.Duration
 	autoTriggerDuration time.Duration
 	sleepFn             func(time.Duration)
 
 	mu    sync.Mutex
 	timer *time.Timer
+}
+
+// hasIPv4Address reports whether the named network interface has at least one
+// non-loopback IPv4 address assigned. Returns false if the interface does not
+// exist or has no addresses (e.g. WiFi is disconnected).
+func hasIPv4Address(ifaceName string) bool {
+	if ifaceName == "" {
+		return true // no check configured
+	}
+	iface, err := net.InterfaceByName(ifaceName)
+	if err != nil {
+		return false
+	}
+	addrs, err := iface.Addrs()
+	if err != nil {
+		return false
+	}
+	for _, addr := range addrs {
+		if ipnet, ok := addr.(*net.IPNet); ok && ipnet.IP.To4() != nil && !ipnet.IP.IsLoopback() {
+			return true
+		}
+	}
+	return false
 }
 
 // Trigger starts the photo workflow if none is currently running.
@@ -95,10 +120,16 @@ func (s *coreServer) runWorkflow() error {
 	slog.Info("photo saved", "path", path)
 
 	oldest, _ := galleryurl.OldestPhotoName(s.photoDir)
+	photoURL := ""
+	if hasIPv4Address(s.wifiIface) {
+		photoURL = galleryurl.DirectURL(s.galleryBaseURL, oldest, resp.Filename)
+	} else {
+		slog.Info("wifi not connected — skipping QR code", "iface", s.wifiIface)
+	}
 	if _, err := s.ui.ShowImage(ctx, &pbui.ShowImageRequest{
 		ImageBytes: resp.ImageBytes,
 		Format:     "image/jpeg",
-		PhotoUrl:   galleryurl.DirectURL(s.galleryBaseURL, oldest, resp.Filename),
+		PhotoUrl:   photoURL,
 	}); err != nil {
 		return fmt.Errorf("ShowImage: %w", err)
 	}
@@ -139,15 +170,20 @@ func main() {
 		dslrAddr           string
 		photoDir           string
 		galleryBaseURL     string
+		wifiIface          string
 		postCaptureSecs    int
 		autoTriggerMinutes int
 		pprofAddr          string
+		logLevel           string
 	)
 
 	cmd := &cobra.Command{
 		Use:   "core",
 		Short: "Photo booth orchestrator gRPC server",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := logsetup.Init(logLevel); err != nil {
+				return err
+			}
 			pprofserver.Start(pprofAddr)
 			if err := os.MkdirAll(photoDir, 0755); err != nil {
 				return fmt.Errorf("create photo dir %s: %w", photoDir, err)
@@ -170,6 +206,7 @@ func main() {
 				dslr:                pbdslr.NewDSLRClient(dslrConn),
 				photoDir:            photoDir,
 				galleryBaseURL:      galleryBaseURL,
+				wifiIface:           wifiIface,
 				postCaptureDuration: time.Duration(postCaptureSecs) * time.Second,
 				autoTriggerDuration: time.Duration(autoTriggerMinutes) * time.Minute,
 				sleepFn:             time.Sleep,
@@ -195,9 +232,11 @@ func main() {
 	cmd.Flags().StringVar(&dslrAddr, "dslr-address", constants.DSLRAddress, "DSLR service gRPC address")
 	cmd.Flags().StringVar(&photoDir, "directory", "/photos", "directory to store photos")
 	cmd.Flags().StringVar(&galleryBaseURL, "gallery-base-url", "", "base URL of the gallery service (e.g. http://photobooth.local:8080); enables QR code on the UI when set")
+	cmd.Flags().StringVar(&wifiIface, "wifi-interface", "wlan0", "network interface to check for connectivity before showing QR code (empty to skip check)")
 	cmd.Flags().IntVar(&postCaptureSecs, "post-capture-seconds", 1, "seconds to block new workflows after a capture")
 	cmd.Flags().IntVar(&autoTriggerMinutes, "auto-trigger-minutes", 29, "minutes of inactivity before auto-triggering a workflow")
 	cmd.Flags().StringVar(&pprofAddr, "pprof-addr", constants.PprofCore, "pprof listen address (empty to disable)")
+	cmd.Flags().StringVar(&logLevel, "log-level", "warn", "log level (debug, info, warn, error)")
 
 	if err := cmd.Execute(); err != nil {
 		os.Exit(1)
