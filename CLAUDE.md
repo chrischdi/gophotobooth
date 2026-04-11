@@ -101,12 +101,6 @@ Use `ctl` stub servers to replace real hardware:
 ./bin/ctl core-trigger
 ```
 
-Or via compose (no-hardware profile):
-
-```bash
-DSLR_ADDRESS=dslr-dummy:50002 podman compose --profile no-hardware up
-```
-
 ### ctl commands
 
 | Command | Target | Description |

@@ -17,7 +17,7 @@ THIRD_PARTY_IMAGES = docker.io/cloudflare/cloudflared:2026.1.2
 
 PROTO_DIRS = proto/core proto/ui proto/dslr
 
-.PHONY: all build build-arm64 generate test vet lint golangci-lint image package run-dummy e2e test-hardware test-hardware-buzzer test-hardware-camera test-manual clean $(addprefix image-,$(SERVICES))
+.PHONY: all build build-arm64 generate test vet lint golangci-lint image package e2e test-hardware test-hardware-buzzer test-hardware-camera test-manual clean $(addprefix image-,$(SERVICES))
 
 all: build
 
@@ -122,10 +122,6 @@ package:
 	tar -czf $(DIST_DIR)/gophotobooth-$(PACKAGE_ARCH).tar.gz -C $$stage .; \
 	rm -rf $$stage
 	@echo "==> $(DIST_DIR)/gophotobooth-$(PACKAGE_ARCH).tar.gz"
-
-## Start all services locally with dummy camera + ctl trigger for debugging
-run-dummy:
-	$(CONTAINER_TOOL) compose --file compose.yaml --profile no-hardware up
 
 ## Run end-to-end tests using real CGO-free binaries (requires make build first)
 e2e: build
